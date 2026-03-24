@@ -152,6 +152,8 @@ export async function main() {
 }
 
 // Automatically run main if this file is executed directly 
-if (process.argv[1] === new URL(import.meta.url).pathname) {
+import { fileURLToPath } from 'url';
+const currentFilePath = fileURLToPath(import.meta.url);
+if (process.argv[1] === currentFilePath) {
     main();
 }

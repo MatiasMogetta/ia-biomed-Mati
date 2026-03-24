@@ -36,7 +36,7 @@ async function llamar(
   systemInstruction?: string
 ) {
   const model = genAI.getGenerativeModel({
-    model: "gemini-2.0-flash",
+    model: "gemini-2.5-flash-lite",
     systemInstruction,
     generationConfig: { temperature: 0.3 }, // Baja para comparar mejor
   });
@@ -200,8 +200,47 @@ async function parteE() {
   // BONUS: ¿Podés hacer que el modelo detecte si le falta información
   //        y la pida explícitamente en vez de inventarla?
 
-  const miSystemInstruction = ""; // <-- TODO: Tu system instruction
-  const miPrompt = ""; // <-- TODO: Tu prompt
+  const miSystemInstruction = `Sos un hematólogo con 20 años de experiencia en un hospital universitario.
+  Respondé de forma clara, concisa y empática, evitando tecnicismos innecesarios.`; // <-- TODO: Tu system instruction
+  const miPrompt = `Sos un sistema de apoyo diagnóstico. Dado un caso clínico,
+respondé con el formato exacto que se muestra en los ejemplos.
+
+EJEMPLO 1:
+Caso: Hombre 65 años, poliuria, polidipsia, pérdida de peso, glucemia 280 mg/dL
+Diagnóstico: Diabetes mellitus tipo 2
+Evidencia clave: Glucemia elevada + síntomas cardinales (poliuria, polidipsia)
+Confianza: ALTA
+Siguiente paso: HbA1c, perfil lipídico, función renal
+
+EJEMPLO 2:
+Caso: Mujer 30 años, palpitaciones, temblor, pérdida de peso, TSH 0.01, T4L 4.8
+Diagnóstico: Hipertiroidismo (probable enfermedad de Graves)
+Evidencia clave: TSH suprimida + T4 libre elevada + síntomas hipermetabólicos
+Confianza: ALTA
+Siguiente paso: Anticuerpos anti-receptor de TSH, ecografía tiroidea
+
+Después de dar tu reporte como en los ejemplos, identificá los hallazgos 
+ANORMALES del laboratorio e indicá cómo se relacionan a tu diagnóstico.
+
+EJEMPLO 1: **1. Identificación de Hallazgos Anormales del Laboratorio:**
+
+*   **Hemoglobina (Hb): 8.9 g/dL** (Ref: 12-16 g/dL) - **Anormalmente BAJA**. Indica anemia.
+*   **VCM (Volumen Corpuscular Medio): 112 fL** (Ref: 80-100 fL) - **Anormalmente ALTO**. Indica macrocitosis. Los glóbulos rojos son más grandes de lo normal.
+*   **Ferritina: 85 ng/mL** (Ref: 12-150 ng/mL) - **Dentro del rango de referencia**. Sin embargo, es importante notar que, aunque esté en rango, podría ser un valor bajo para una persona con anemia, especialmente si se considera la dieta vegetariana estricta.
+*   **Vitamina B12: 95 pg/mL** (Ref: 200-900 pg/mL) - **Anormalmente BAJA**. Indica deficiencia de Vitamina B12.
+*   **Ácido fólico: 4.2 ng/mL** (Ref: 2.7-17 ng/mL) - **Dentro del rango de referencia**.
+*   **TSH (Hormona Estimulante de la Tiroides): 3.2 mUI/L** (Ref: 0.4-4.0 mUI/L) - **Dentro del rango de referencia**. El hipotiroidismo de la paciente parece estar controlado.
+*   **LDH (Lactato Deshidrogenasa): 580 U/L** (Ref: 140-280 U/L) - **Anormalmente ALTA**. La LDH elevada puede indicar daño celular o aumento de la producción de glóbulos rojos.
+*   **Reticulocitos: 1.2%** (Ref: 0.5-2.5%) - **Dentro del rango de referencia**. Los reticulocitos son glóbulos rojos jóvenes. Un valor normal en el contexto de anemia sugiere que la médula ósea no está respondiendo adecuadamente a la anemia, o que la producción de glóbulos rojos está siendo contrarrestada por una destrucción o pérdida.
+
+**Resumen de Anormalidades:**
+*   Anemia (Hb baja)
+*   Macrocitosis (VCM alto)
+*   Deficiencia de Vitamina B12 (B12 baja)
+*   LDH elevada
+
+AHORA ANALIZÁ ESTE CASO:
+${CASO_CLINICO}` // <-- TODO: Tu prompt
 
   if (!miPrompt) {
     console.log("\n⚠️  Completá el TODO 2 para correr esta parte.\n");
