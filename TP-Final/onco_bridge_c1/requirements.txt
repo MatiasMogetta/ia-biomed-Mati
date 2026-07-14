@@ -1,0 +1,8 @@
+# Para la búsqueda automática de hiperparámetros.
+optuna>=4.0,<5.0
+# Embeddings multilingües para el RAG semántico híbrido.
+sentence-transformers>=3.0
+# UI local y asistente generativo basado en Gemini.
+streamlit>=1.40
+google-genai>=1.0
+python-dotenv>=1.0
