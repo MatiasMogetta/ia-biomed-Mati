@@ -5,6 +5,5 @@
 node_modules/
 dist/
 *.log
-dataset_clinical_only/
 TP-Final/onco_bridge_c1/.env
 TP-Final/onco_bridge_c1/.env.example
