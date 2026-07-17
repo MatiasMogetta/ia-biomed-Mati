@@ -1,0 +1,9 @@
+{
+  "cases": [
+    {
+      "case_id": "example_001",
+      "prediction_mask": "masks/example_001_pred.png",
+      "ground_truth_mask": "masks/example_001_gt.png"
+    }
+  ]
+}

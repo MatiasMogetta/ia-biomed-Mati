@@ -8,19 +8,16 @@ import streamlit as st
 
 from onco_bridge import ClinicalPipeline, RadiologyAssistant
 from onco_bridge.clinical_assistant import ClinicalAssistant, local_summary
+from onco_bridge.config import DEFAULT_CONFIG_PATH, GT_DIRECTORY, load_pipeline_config
 
 
 ROOT = Path(__file__).resolve().parent
-GT_DIRECTORY = ROOT.parent / "dataset_clinical_only" / "dataset" / "oncology_ground_truth_base"
-CONFIG_PATH = ROOT / "best_hyperparameters.json"
+CONFIG_PATH = DEFAULT_CONFIG_PATH
 
 
 @st.cache_resource(show_spinner="Cargando modelo de recuperación clínica…")
 def get_pipeline() -> ClinicalPipeline:
-    config = {}
-    if CONFIG_PATH.exists():
-        payload = json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
-        config = payload.get("best_config", payload)
+    config = load_pipeline_config(CONFIG_PATH)
     return ClinicalPipeline(GT_DIRECTORY, **config)
 
 
@@ -123,10 +120,22 @@ def show_c2(external_consent: bool) -> None:
         st.write(c1_output.get("clinical_summary", ""))
         for item in c1_output.get("matched_ground_truths", []):
             st.markdown(f"- **{item['icd_10_description']}** — {item['match_probability']:.0%}")
+    with st.expander("Referencias solicitadas a 3D MedDiffusion", expanded=False):
+        for item in c1_output.get("matched_ground_truths", []):
+            instructions = item.get("radiologist_instructions", {})
+            st.markdown(f"**{item['gt_id']} — {item['icd_10_description']}**")
+            st.code(instructions.get("meddiffusion_reference_prompt", "Sin prompt"), language=None)
+            st.caption("Negative prompt: " + instructions.get("meddiffusion_negative_prompt", "Sin negative prompt"))
 
     image = st.file_uploader("Cargar estudio de imagen (PNG, JPG o WEBP)", type=["png", "jpg", "jpeg", "webp"], key="c2_image")
-    modality = st.selectbox("Modalidad", ["mammography", "CT", "MRI", "ultrasound", "X-ray", "other"], key="c2_modality")
-    view = st.text_input("Vista o proyección", placeholder="Ej.: MLO + CC bilateral", key="c2_view")
+    references = st.file_uploader(
+        "Referencias sintéticas 3D MedDiffusion (opcionales)",
+        type=["png", "jpg", "jpeg", "webp"],
+        accept_multiple_files=True,
+        key="c2_references",
+    )
+    modality = st.selectbox("Modalidad", ["chest_CT", "abdominal_CT", "head_neck_CT", "chest_MRI", "abdominal_MRI", "head_neck_MRI", "other"], key="c2_modality")
+    view = st.text_input("Vista o proyección", placeholder="Ej.: axial con contraste, cortes de 1.25 mm", key="c2_view")
     acquisition_date = st.date_input("Fecha de adquisición", key="c2_date")
     if image:
         st.image(image.getvalue(), caption=image.name, use_container_width=True)
@@ -147,6 +156,7 @@ def show_c2(external_consent: bool) -> None:
                         modality,
                         view or "no especificada",
                         acquisition_date,
+                        [(reference.getvalue(), reference.type or "image/png") for reference in references],
                     )
             except Exception as error:
                 st.error(f"No se pudo completar el análisis radiológico: {error}")

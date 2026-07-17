@@ -18,20 +18,23 @@ from .semantic import SemanticRetriever
 
 STOPWORDS = {"de", "la", "el", "en", "con", "sin", "y", "a", "o", "un", "una", "del", "por", "para", "que", "se", "es", "al"}
 SYNONYMS = {
-    "breast": "mama", "cancer": "cancer", "tumor": "masa", "lump": "masa",
+    "cancer": "cancer", "tumor": "masa", "lump": "masa",
     "lung": "pulmon", "pulmonary": "pulmon", "colon": "colon", "colorectal": "colon",
     "liver": "higado", "pancreatic": "pancreas", "thyroid": "tiroides",
-    "prostate": "prostata", "family": "familiar", "mother": "madre",
-    "ovarian": "ovario", "mammography": "mamografia", "palpable": "palpable",
+    "kidney": "rinon", "renal": "rinon", "gastric": "estomago", "stomach": "estomago",
+    "adrenal": "suprarrenal", "biliary": "biliar", "family": "familiar",
+    "palpable": "palpable", "computed": "tomografia", "tomography": "tomografia",
 }
 ORGAN_TERMS = {
-    "mama": {"mama", "breast", "pezon", "mamografia"},
     "pulmon": {"pulmon", "lung", "torax", "tos", "disnea", "hemoptisis"},
     "colon": {"colon", "rectal", "intestinal", "heces", "diverticul"},
     "intestino": {"colon", "rectal", "intestinal", "heces"},
-    "prostata": {"prostata", "psa", "urin"},
     "tiroides": {"tiroid", "cuello"}, "linfoide": {"linf", "ganglio", "adenopatia"},
-    "higado": {"higado", "hepatic", "hepat", "afp"}, "pancreas": {"pancreas", "pancreat", "ictericia", "diabetes"},
+    "higado": {"higado", "hepatic", "hepat", "afp", "biliar", "colangio", "ictericia"},
+    "pancreas": {"pancreas", "pancreat", "ictericia", "diabetes"},
+    "rinon": {"rinon", "renal", "hematuria", "flanco", "orina", "bosniak"},
+    "estomago": {"estomago", "gastric", "epigastr", "saciedad", "melena"},
+    "suprarrenal": {"suprarrenal", "adrenal", "cortisol", "aldosterona", "metanefrina"},
 }
 URGENCY_WEIGHT = {"alta": 1.0, "media": 0.60, "baja": 0.30}
 SEMANTIC_RETRIEVER_CACHE: dict[tuple[str, str], SemanticRetriever] = {}

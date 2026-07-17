@@ -1,252 +1,238 @@
-# OncoBridge AI — Dataset de evaluación (versión clinical-only)
+# OncoBridge AI
 
-Dataset de evaluación para el **TP Final de IA Generativa para Biomedicina**. Esta versión está enfocada exclusivamente en el **Componente 1** del sistema (análisis clínico + RAG + ranking de hipótesis diagnósticas). **No incluye estudios de imagen.**
+Sistema educativo de apoyo a la decisión oncológica desarrollado para el TP Final de **IA Generativa para Datos Biomédicos**. Conecta dos perfiles:
 
-> **Documento de referencia obligatorio:** `OncoBridge_AI_Assignment.md` — contiene el enunciado completo, el contrato de inputs/outputs, los criterios de evaluación y los requisitos de la entrega. Este README solo describe la estructura del dataset.
+- **Componente 1 — oncólogo/clínico:** recupera ground truths relevantes mediante RAG híbrido, rankea hipótesis, estima si hace falta diagnóstico por imágenes y prepara instrucciones para radiología.
+- **Componente 2 — radiólogo:** recibe el output de C1 y un estudio de CT/MRI, lo contrasta con los patrones esperados y devuelve regiones de interés descriptivas, hallazgos y una recomendación estructurada.
 
----
+Es un prototipo académico sobre datos sintéticos. **No está validado para uso clínico real ni reemplaza el juicio profesional.**
 
-## Estructura de carpetas
+## Cambios incorporados en la consigna actualizada
 
-```
-dataset_clinical_only/
-├── README.md                          ← este archivo
-└── dataset/
-    ├── index.json                     ← índice de los 110 casos (para exploración rápida)
-    ├── oncology_ground_truth_base/    ← 30 entradas GT (base de conocimiento del sistema)
-    │   ├── GT-BRCA-001.json
-    │   ├── GT-BRCA-002.json
-    │   └── ...
-    └── clinical_cases/                ← 110 casos clínicos para evaluación
-        ├── case_001/
-        │   ├── input.json             ← input al Componente 1 (datos del paciente)
-        │   └── expected_output.json   ← ground truth contra el que comparar
-        ├── case_002/
-        └── ...
-```
+El contrato funcional, las métricas, la estructura de entrega y los porcentajes de evaluación no cambiaron. Los cambios están en los ejemplos y en la cobertura clínica:
 
----
+- Los ejemplos de carcinoma mamario/fibroadenoma/mastitis pasaron a adenocarcinoma pulmonar/hamartoma/neumonía.
+- La base sigue teniendo **30 GT y 110 casos**, pero elimina mama y próstata porque esas regiones no están contempladas por el flujo de 3D MedDiffusion propuesto.
+- Se reemplazaron 10 GT antiguos por patologías renales, gástricas, hepatobiliares y suprarrenales: carcinoma renal, masa renal temprana, angiomiolipoma, quiste renal, pielonefritis, cáncer gástrico, colangiocarcinoma, hiperplasia nodular focal, carcinoma adrenocortical y adenoma suprarrenal.
+- Las guías de imagen y los prompts de referencia ahora se concentran en **CT/MRI de cabeza-cuello, tórax y abdomen**.
+- Los ejemplos de input/output, estudios radiológicos, próximos pasos y estructura del dataset fueron actualizados para esas patologías.
 
-## 1. Base de ground truth oncológico (`oncology_ground_truth_base/`)
+La consigna vigente es [OncoBridge_AI_Assignment.md](OncoBridge_AI_Assignment.md). La versión anterior se conserva localmente para trazabilidad dentro de `legacy/`, está excluida de Git y no es utilizada por el código.
 
-**30 archivos JSON**, uno por entrada. Esta es la **base de conocimiento que el sistema debe consultar via RAG** para producir hipótesis diagnósticas. Está descrita en detalle en la sección §4.1 del enunciado.
+## Arquitectura
 
-### Cobertura
-
-| Órgano | Malignas | Diferenciales benignos | Total |
-|---|---|---|---|
-| Mama | 4 (carcinoma ductal, lobulillar, DCIS, inflamatorio) | 4 (fibroadenoma, mastitis, quiste, papiloma) | 8 |
-| Pulmón / tórax | 4 (adeno, escamoso, células pequeñas, mesotelioma) | 4 (neumonía, granuloma, TBC, EPID) | 8 |
-| Colon / GI | 3 | 2 (colitis ulcerosa, diverticulitis) | 5 |
-| Próstata | 1 | 1 (HPB) | 2 |
-| Tiroides | 1 | 1 (nódulo benigno) | 2 |
-| Linfoma | 2 (no Hodgkin, Hodgkin) | — | 2 |
-| Hígado | 1 (HCC) | 1 (hemangioma) | 2 |
-| Páncreas | 1 (adenoCA ductal) | — | 1 |
-| **Total** | **17** | **13** | **30** |
-
-### Esquema de cada GT
-
-```jsonc
-{
-  "gt_id": "GT-BRCA-001",                    // ID único, formato GT-<CÓDIGO>-<NÚMERO>
-  "icd_10": "C50.4",                          // Código ICD-10 oficial
-  "icd_10_description": "Neoplasia maligna...",
-  "objective_data": {
-    "biomarkers": { ... },                    // dict de biomarcadores con umbrales
-    "clinical_findings": [ ... ],             // hallazgos al examen físico
-    "risk_factors": [ ... ],                  // factores de riesgo
-    "prior_imaging_red_flags": [ ... ]
-  },
-  "subjective_data": {
-    "symptoms": [ ... ],                      // síntomas reportados
-    "patient_reported_concerns": [ ... ],     // frases en lenguaje del paciente
-    "onset_pattern": "..."                    // patrón de evolución
-  },
-  "radiologist_guidance": {
-    "modality_priority": [ ... ],             // ej: ["mammography", "breast_ultrasound"]
-    "views_recommended": [ ... ],
-    "imaging_location": {
-      "body_region": "...",
-      "anatomical_landmarks": "...",
-      "bilateral_comparison_required": true,
-      "priority_zones": [ ... ],
-      "positioning_notes": "..."
-    },
-    "expected_imaging_findings": "...",
-    "meddiffusion_prompt": "...",             // para generar imagen de referencia
-    "meddiffusion_negative_prompt": "...",
-    "image_generation_notes": "..."
-  },
-  "base_probability": 0.78,                   // probabilidad a priori
-  "urgency_level": "alta",                    // alta | media | baja
-  "notes": "...",                             // observación clínica
-  "_meta": { "category": "...", "organ": "..." }  // metadatos internos (opcionales)
-}
+```mermaid
+flowchart LR
+    A["Input clínico JSON"] --> B["Normalización y resumen"]
+    G["30 ground truths actuales"] --> C["RAG léxico + embeddings BGE-M3"]
+    B --> C
+    C --> D["Scoring clínico y ranking"]
+    D --> E["Output C1: hipótesis, derivación y prompts"]
+    E --> F["Asistente conversacional Gemini"]
+    E --> H["Componente 2"]
+    I["Estudio CT/MRI del paciente"] --> H
+    J["Referencias sintéticas 3D MedDiffusion opcionales"] --> H
+    H --> K["ROI descriptivas, hallazgos y recomendación"]
 ```
 
-> Para el detalle clínico de cada campo, ver el ejemplo extendido en §4.1 del enunciado.
+Los embeddings de los 30 GT se calculan localmente una vez y quedan en `onco_bridge_c1/.cache/`. Gemini solo se usa para el resumen/chat y para interpretar imágenes en C2, siempre que el usuario lo habilite.
 
----
+## Estructura del entregable
 
-## 2. Casos clínicos (`clinical_cases/`)
-
-**110 carpetas** (`case_001/` a `case_110/`), cada una con dos archivos:
-
-### `input.json` — input al Componente 1
-
-```jsonc
-{
-  "patient_id": "PAT-00101",
-  "demographics": {
-    "age": 58,
-    "sex": "F",
-    "family_history": ["breast_cancer", "ovarian_cancer"]
-  },
-  "current_symptoms": [
-    "masa palpable CSE mama izquierda",
-    "dolor localizado 3 semanas"
-  ],
-  "medical_history": [
-    { "date": "2021-03", "event": "Biopsia mama derecha — fibroadenoma." },
-    { "date": "2023-11", "event": "Mamografía bilateral — BI-RADS 2." }
-  ],
-  "current_labs": {
-    "CA_15_3": 42.1,
-    "CEA": 6.2,
-    "hemograma": "normal"
-  }
-}
+```text
+TP-Final/
+├── README.md
+├── requirements.txt
+├── .env.example
+├── OncoBridge_AI_Assignment.md
+├── dataset_clinical_only/
+│   └── dataset/
+│       ├── index.json
+│       ├── oncology_ground_truth_base/   # 30 GT
+│       └── clinical_cases/               # 110 casos
+├── onco_bridge_c1/
+│   ├── app.py
+│   ├── run_component1.py
+│   ├── run_component2.py
+│   ├── run_end_to_end.py
+│   ├── prepare_meddiffusion_references.py
+│   ├── split_dataset.py
+│   ├── optimize_hyperparameters.py
+│   ├── evaluate.py
+│   ├── evaluate_component2.py
+│   ├── data_splits/
+│   ├── artifacts/
+│   └── onco_bridge/
+└── legacy/                               # archivo local anterior, excluido de Git
 ```
 
-> **Nota:** no hay campo `imaging_study` en esta versión. Si tu sistema lo necesita para C2, generá las imágenes vos mismo a partir del `meddiffusion_prompt` del GT correspondiente, o usá un dataset público externo.
+## Guía de ejecución desde cero (PowerShell)
 
-### `expected_output.json` — ground truth para evaluación
+Todos los comandos siguientes se ejecutan desde la carpeta `TP-Final`.
 
-```jsonc
-{
-  "case_id": "case_001",
-  "correct_gt_ids": ["GT-BRCA-001"],                  // GT(s) que el sistema DEBE matchear
-  "acceptable_secondary_gt_ids": ["GT-FIBROA-001"],   // GTs aceptables como secundarios
-  "imaging_needed_ground_truth": true,                // si efectivamente requiere imagen
-  "urgency_ground_truth": "alta",                     // alta | media | baja | ninguna
-  "specialist_decision": "DERIVAR_A_IMAGEN",          // ver tabla abajo
-  "conclusive_ground_truth": true,                    // si hay hipótesis conclusiva
-  "difficulty": "facil",                              // facil | moderado | dificil
-  "notes": "Carcinoma ductal CSE clásico en alto riesgo."
-}
+### 1. Crear y activar el entorno
+
+Se recomienda Python **3.12**. El proyecto admite Python 3.10 o superior, pero varias dependencias de ML todavía pueden no publicar ruedas compatibles con Python 3.14.
+
+```powershell
+py -3.12 -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install --upgrade pip
+pip install -r requirements.txt
 ```
 
-**Valores posibles de `specialist_decision`:**
+La primera ejecución semántica descarga `BAAI/bge-m3` desde Hugging Face y puede tardar. Luego los embeddings de los GT se reutilizan desde caché.
 
-| Valor | Significado |
-|---|---|
-| `DERIVAR_A_IMAGEN` | El sistema debe recomendar derivación a estudio de imagen |
-| `NO_DERIVAR` | El sistema identifica condición benigna o sin necesidad de imagen |
-| `SEGUIMIENTO_CLINICO` | Sin urgencia de imagen pero requiere seguimiento |
-| `SIN_ELEMENTOS_PARA_EVALUAR` | Datos insuficientes para formular hipótesis |
+### 2. Configurar Gemini
 
----
-
-## 3. Composición de los 110 casos
-
-| Categoría | N | Qué evalúa |
-|---|---|---|
-| **TP** (true positive) | 30 | Cáncer claro distribuido entre los 17 GT oncológicos — debe derivar |
-| **TN** (true negative) | 30 | 15 `SIN_ELEMENTOS` (sano) + 15 `NO_DERIVAR` (match benigno claro) |
-| **FP** (false positive borderline) | 15 | Síntomas sospechosos pero benigno (mastitis, neumonía, diverticulitis, hemangioma, HPB) — el sistema debe NO sobre-derivar |
-| **FN** (false negative sutil) | 15 | Cáncer atípico (lobulillar sin masa, pulmón en no fumador, páncreas con diabetes nueva) — el sistema debe alertar pese a perfil atípico |
-| **COMPLEX** | 20 | Historial extenso (8-12 eventos por paciente) — estresa la **eficiencia de contexto** del LLM (criterio §4.0 del enunciado) |
-
-### Por dificultad
-
-- `facil`: 48 casos (43%)
-- `moderado`: 40 casos (36%)
-- `dificil`: 22 casos (20%)
-
-### Por decisión esperada
-
-- `DERIVAR_A_IMAGEN`: 78 casos
-- `NO_DERIVAR`: 16 casos
-- `SIN_ELEMENTOS_PARA_EVALUAR`: 15 casos
-- `SEGUIMIENTO_CLINICO`: 1 caso
-
----
-
-## 4. `index.json` — índice de exploración rápida
-
-Resumen tabular de los 110 casos con sus IDs, categoría, GT correcto y dificultad. Útil para:
-
-- Explorar el dataset sin tener que abrir 110 carpetas
-- Filtrar casos por categoría o dificultad
-- Construir loaders en Python / Pandas
-
-```python
-import json
-index = json.load(open("dataset/index.json"))
-for case in index["cases"]:
-    print(case["case_id"], case["category"], case["correct_gt_ids"])
+```powershell
+Copy-Item .env.example .env
+notepad .env
 ```
 
----
+Completar `GEMINI_API_KEY` y, si corresponde, cambiar los nombres de modelo por modelos disponibles para esa clave. C1 puede funcionar sin Gemini; C2 y el chat generativo sí requieren la API.
 
-## 5. Cómo cargar el dataset en Python
+Probar la clave:
 
-```python
-import json
-from pathlib import Path
-
-ROOT = Path("dataset")
-
-# Cargar todas las entradas GT
-gt_base = {}
-for gt_file in (ROOT / "oncology_ground_truth_base").glob("*.json"):
-    entry = json.loads(gt_file.read_text())
-    gt_base[entry["gt_id"]] = entry
-
-# Cargar todos los casos clínicos
-cases = []
-for case_dir in sorted((ROOT / "clinical_cases").glob("case_*")):
-    cases.append({
-        "case_id": case_dir.name,
-        "input": json.loads((case_dir / "input.json").read_text()),
-        "expected": json.loads((case_dir / "expected_output.json").read_text()),
-    })
-
-print(f"GT entries: {len(gt_base)}")    # 30
-print(f"Cases: {len(cases)}")            # 110
+```powershell
+python onco_bridge_c1\test_gemini_api.py
 ```
 
----
+### 3. Generar el split reproducible 70/30
 
-## 6. Cómo usar este dataset en el TP
+```powershell
+python onco_bridge_c1\split_dataset.py
+```
 
-1. **Sistema (Componente 1):** indexar la base de ground truth con la estrategia RAG que diseñe el equipo. La base tiene 30 entradas — el sistema debe poder consultarla eficientemente respetando la restricción de contexto descripta en §4.0 del enunciado.
+Genera manifiestos con punteros a los casos originales, sin copiarlos ni modificarlos:
 
-2. **Evaluación:** correr cada uno de los 110 casos contra el sistema, comparando el output producido con el `expected_output.json` correspondiente. El script de evaluación debe medir:
+- `onco_bridge_c1/data_splits/train_cases.json`: 77 casos.
+- `onco_bridge_c1/data_splits/test_cases.json`: 33 casos.
 
-   - **Precisión de GT match:** % de casos donde `correct_gt_ids` está entre los devueltos.
-   - **Calibración:** correlación entre `match_probability` reportada y la frecuencia real de acierto.
-   - **Accuracy de derivación:** coincidencia con `specialist_decision` y `imaging_needed_ground_truth`.
-   - **Eficiencia de tokens:** prompt + completion tokens promedio por caso.
+### 4. Correr el Componente 1
 
-3. **Componente 2 (asistencia radiológica):** este dataset **no incluye estudios de imagen**. Para implementar y evaluar C2, el equipo puede:
-   - Generar imágenes sintéticas a partir de los `meddiffusion_prompt` de los GT enlazados.
-   - Usar un dataset público externo (CBIS-DDSM, ChestX-ray14, MedMNIST).
-   - Diseñar una versión textual del input para C2 si el alcance se restringe a C1.
+El siguiente comando analiza un caso del dataset y muestra el JSON en consola:
 
-   La decisión y su justificación es parte del trabajo.
+```powershell
+python onco_bridge_c1\run_component1.py dataset_clinical_only\dataset\clinical_cases\case_001\input.json
+```
 
----
+Para guardar el resultado:
 
-## 7. Limitaciones a tener en cuenta
+```powershell
+python onco_bridge_c1\run_component1.py dataset_clinical_only\dataset\clinical_cases\case_001\input.json --output onco_bridge_c1\artifacts\c1_case_001.json
+```
 
-1. **Contenido sintético:** los casos y la base GT están anclados en guías clínicas públicas (NCCN, ESMO, ICD-10 WHO, BI-RADS) pero no fueron revisados por especialistas certificados. **No usar para decisiones clínicas reales.**
+El output visible contiene `matched_ground_truths`, probabilidades, instrucciones para el radiólogo, `recommendation`, `urgency` y uso estimado de tokens. Si todavía no existe una configuración optimizada, se usan valores por defecto seguros.
 
-2. **Sin pediatría ni embarazo:** el dataset cubre adultos (22-79 años) y no incluye condiciones gestacionales ni pediátricas.
+### 5. Optimizar hiperparámetros solo con train
 
-3. **Distribución de GTs no uniforme:** ca colorrectal, mama y pulmón están sobre-representados — refleja la prevalencia clínica real.
+```powershell
+python onco_bridge_c1\optimize_hyperparameters.py --trials 150 --min-sensitivity 0.80
+```
 
-4. **Casos de borde intencionales:** algunos casos referencian dominios oncológicos sin GT exacto en la base (ej. `case_020` ca gástrico, `case_109` ca ovario). Son intencionales para evaluar cómo el sistema responde cuando no hay match perfecto.
+Genera:
 
-5. **`base_probability` aproximada:** los valores en los GT son orientativos. Parte del trabajo del equipo es decidir si recalibrarlos según los datos del paciente y documentar su fórmula (ver §4.2 del enunciado).
+- `onco_bridge_c1/artifacts/best_hyperparameters.json`.
+- `onco_bridge_c1/artifacts/optimization_trials.csv`.
+
+La función objetivo pesa por igual sensibilidad, especificidad y precisión del GT principal. Una huella del dataset impide cargar accidentalmente pesos aprendidos con la versión anterior. No se debe mirar test durante la optimización.
+
+### 6. Evaluar C1
+
+Train, para inspección durante el desarrollo:
+
+```powershell
+python onco_bridge_c1\evaluate.py --manifest onco_bridge_c1\data_splits\train_cases.json
+```
+
+Test, una única vez para el resultado final:
+
+```powershell
+python onco_bridge_c1\evaluate.py --manifest onco_bridge_c1\data_splits\test_cases.json
+```
+
+Los 110 casos:
+
+```powershell
+python onco_bridge_c1\evaluate.py
+```
+
+Los reportes se guardan en `onco_bridge_c1/artifacts/`. El evaluador verifica que el **primer GT** sea correcto, además de derivación, sensibilidad, especificidad, urgencia, conclusividad, calibración y correspondencia del prompt MedDiffusion.
+
+### 7. Preparar referencias para 3D MedDiffusion
+
+El dataset no contiene imágenes. Este script extrae de C1 los prompts, negative prompts, modalidades y nombres sugeridos:
+
+```powershell
+python onco_bridge_c1\prepare_meddiffusion_references.py onco_bridge_c1\artifacts\c1_case_001.json --output-dir meddiffusion_references\case_001
+```
+
+El archivo `manifest.json` resultante es la entrada reproducible para ejecutar 3D MedDiffusion en su entorno propio. La ejecución del modelo 3D no se incluye en este repositorio porque requiere pesos, hardware y configuración que no fueron entregados con el dataset. Las imágenes generadas deben guardarse con los nombres indicados por el manifiesto.
+
+### 8. Correr el Componente 2
+
+Primero se puede generar una imagen **no médica** para comprobar que el contrato completo funciona:
+
+```powershell
+python onco_bridge_c1\create_demo_assets.py
+python onco_bridge_c1\run_component2.py onco_bridge_c1\artifacts\c1_case_001.json onco_bridge_c1\demo_assets\non_medical_test_image.png --modality abdominal_CT --view "prueba técnica" --output onco_bridge_c1\artifacts\c2_demo.json
+```
+
+El output esperado es un JSON visible con clasificación `imagen_no_evaluable`: esto valida la integración, no la capacidad radiológica. Para una prueba significativa, reemplazar la imagen por una captura PNG/JPG/WEBP de CT/MRI y agregar opcionalmente una o más referencias con `--reference-image ruta\referencia.png`. C2 separa explícitamente el estudio real de las referencias. Las ROI actuales son descriptivas; no constituyen una máscara pixel a pixel validada.
+
+### 9. Correr el flujo end-to-end
+
+```powershell
+python onco_bridge_c1\run_end_to_end.py dataset_clinical_only\dataset\clinical_cases\case_001\input.json onco_bridge_c1\demo_assets\non_medical_test_image.png --modality abdominal_CT --view "prueba técnica" --output onco_bridge_c1\artifacts\end_to_end_demo.json
+```
+
+Este único comando encadena C1 y C2 y produce un resultado visible. Requiere `GEMINI_API_KEY` por el análisis visual de C2. Para el caso real se reemplaza la imagen de prueba y, si se desea, se agrega `--reference-image`.
+
+### 10. Abrir la interfaz
+
+```powershell
+streamlit run onco_bridge_c1\app.py
+```
+
+En la barra lateral se elige Componente 1 o Componente 2. C2 muestra los prompts de referencia, permite adjuntar las imágenes sintéticas y exige confirmación antes de enviar datos a Gemini.
+
+### 11. Evaluar segmentación de C2
+
+Cuando se disponga de imágenes y máscaras binarias anotadas, copiar `onco_bridge_c1/component2_eval_manifest.example.json`, completar las rutas y ejecutar:
+
+```powershell
+python onco_bridge_c1\evaluate_component2.py C:\ruta\component2_eval_manifest.json --report onco_bridge_c1\artifacts\component2_evaluation.json
+```
+
+Produce IoU, sensibilidad y especificidad por píxel. El dataset entregado por la cátedra no permite calcular estas métricas porque no incluye imágenes ni máscaras.
+
+## Dataset y resultados actuales
+
+El dataset vigente contiene 30 GT y 110 casos sintéticos: 30 TP, 30 TN, 15 FP, 15 FN y 20 complejos. La partición estratificada fija usa 77 casos para train y 33 para test.
+
+Como control de integración se ejecutó el pipeline con pesos por defecto y recuperación léxica de respaldo, porque el entorno de mantenimiento no tenía instaladas las dependencias de embeddings. Estos valores **no son el resultado final del modelo híbrido**:
+
+| Split | GT principal | Accuracy derivación | Sensibilidad | Especificidad |
+|---|---:|---:|---:|---:|
+| Train (77) | 31.17% | 70.13% | 90.74% | 34.78% |
+| Test (33) | 42.42% | 69.70% | 91.67% | 44.44% |
+
+Antes de la entrega se debe ejecutar la optimización con BGE-M3 y reemplazar esta tabla por los resultados finales de train/test. Los JSON de este control quedan en `onco_bridge_c1/artifacts/`.
+
+## Limitaciones conocidas y trabajo futuro
+
+- Los casos son sintéticos, no fueron validados prospectivamente ni revisados como cohorte por especialistas certificados.
+- C1 no es un modelo diagnóstico y sus probabilidades son scores calibrables, no riesgo clínico real.
+- Los GT contienen instrucciones anatómicas prototípicas; la lateralidad debe ser revisada contra el caso antes de usar la guía.
+- Hay una inconsistencia nominal entre los ejemplos de la consigna (`GT-LUNG-*`, `GT-HCC-*`, `GT-HAMARTOMA-*`) y los archivos realmente entregados (`GT-PULM-*`, `GT-HIGADO-*` y otros diferenciales). El sistema toma como fuente de verdad los IDs del dataset.
+- C2 usa Gemini Vision sobre imágenes renderizadas, no procesa volúmenes DICOM/NIfTI completos.
+- Las ROI de C2 son descriptivas; una evaluación IoU real exige un segmentador, máscaras y un dataset radiológico anotado.
+- 3D MedDiffusion se integra mediante manifiestos y referencias opcionales, pero la inferencia del generador no está empaquetada en este repositorio.
+- Para producción harían falta anonimización DICOM, cifrado, control de acceso, auditoría, versionado de modelos, monitoreo de drift, validación clínica y un procedimiento de contingencia.
+
+Trabajo futuro prioritario: adaptar C2 a DICOM/NIfTI, incorporar un segmentador médico validado, construir un dataset multimodal con máscaras de especialistas, calibrar probabilidades y evaluar sesgos por edad, sexo y centro de adquisición.
+
+## Privacidad
+
+No enviar PHI identificable a Gemini. La UI exige una confirmación explícita antes de usar servicios externos. Las claves se guardan en `.env`, archivo excluido de Git. En un despliegue real se requeriría anonimización previa, secretos administrados, cifrado en tránsito/reposo, mínimo privilegio y cumplimiento de Ley 26.529/HIPAA/GDPR según jurisdicción.

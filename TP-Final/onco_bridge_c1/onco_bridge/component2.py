@@ -7,14 +7,19 @@ import re
 from datetime import date
 from typing import Any
 
-from dotenv import load_dotenv
-
+try:
+    from dotenv import load_dotenv
+except ImportError:  # C1 puede ejecutarse sin las dependencias opcionales de Gemini.
+    def load_dotenv() -> bool:
+        return False
 
 load_dotenv()
 
 C2_SYSTEM_INSTRUCTIONS = """Eres el Componente 2 de OncoBridge AI, una herramienta de apoyo
-para radiólogos. Recibís el output verificado del Componente 1 y una imagen clínica. Contrastá
-las hipótesis y zonas de interés de C1 con lo que es posible observar en la imagen.
+para radiólogos. Recibís el output verificado del Componente 1, una imagen clínica y,
+cuando estén disponibles, imágenes sintéticas de referencia generadas con 3D MedDiffusion.
+Contrastá las hipótesis y zonas de interés de C1 con lo observable en el estudio del paciente.
+Las referencias muestran patrones esperados y nunca son evidencia del caso real.
 
 Respondé ÚNICAMENTE con un objeto JSON válido, sin Markdown ni texto adicional, con este esquema:
 {
@@ -51,7 +56,10 @@ def _extract_json(text: str) -> dict[str, Any]:
 
 
 def _normalise_output(payload: dict[str, Any], patient_id: str, model: str, usage: Any) -> dict[str, Any]:
-    regions = payload.get("segmentation", {}).get("regions_of_interest", [])
+    segmentation = payload.get("segmentation") if isinstance(payload.get("segmentation"), dict) else {}
+    regions = segmentation.get("regions_of_interest", [])
+    if not isinstance(regions, list):
+        regions = []
     normalised_regions = []
     for index, region in enumerate(regions, start=1):
         size = region.get("size_mm")
@@ -68,14 +76,21 @@ def _normalise_output(payload: dict[str, Any], patient_id: str, model: str, usag
         confidence = max(0.0, min(1.0, float(confidence)))
     except (TypeError, ValueError):
         confidence = 0.0
+    allowed_classifications = {"sospechoso", "indeterminado", "sin_hallazgos_relevantes", "imagen_no_evaluable"}
+    classification = str(payload.get("classification") or "indeterminado")
+    if classification not in allowed_classifications:
+        classification = "indeterminado"
+    next_steps = payload.get("next_steps", [])
+    if not isinstance(next_steps, list):
+        next_steps = []
     return {
         "patient_id": payload.get("patient_id") or patient_id,
         "segmentation": {"regions_of_interest": normalised_regions},
         "findings": str(payload.get("findings") or "Sin hallazgos estructurados reportados."),
-        "classification": str(payload.get("classification") or "indeterminado"),
+        "classification": classification,
         "confidence": confidence,
         "final_recommendation": str(payload.get("final_recommendation") or "Revisión por especialista en imágenes."),
-        "next_steps": [str(step) for step in payload.get("next_steps", [])],
+        "next_steps": [str(step) for step in next_steps],
         "token_usage": {
             "prompt_tokens": getattr(usage, "prompt_token_count", None),
             "completion_tokens": getattr(usage, "candidates_token_count", None),
@@ -105,6 +120,7 @@ class RadiologyAssistant:
         modality: str,
         view: str,
         acquisition_date: date | str | None = None,
+        reference_images: list[tuple[bytes, str]] | None = None,
     ) -> dict[str, Any]:
         if not self.available:
             raise RuntimeError("No hay GEMINI_API_KEY configurada para ejecutar el Componente 2.")
@@ -122,6 +138,16 @@ class RadiologyAssistant:
                 "acquisition_date": date_value,
             },
         }
+        contents: list[Any] = [json.dumps(context, ensure_ascii=False), image_part]
+        if reference_images:
+            contents.append(
+                "Las imágenes siguientes son referencias sintéticas 3D MedDiffusion; "
+                "no pertenecen al paciente y solo sirven para contrastar patrones."
+            )
+            contents.extend(
+                types.Part.from_bytes(data=data, mime_type=reference_mime or "image/png")
+                for data, reference_mime in reference_images
+            )
         response = client.models.generate_content(
             model=self.model,
             config=types.GenerateContentConfig(
@@ -129,10 +155,7 @@ class RadiologyAssistant:
                 temperature=0.1,
                 response_mime_type="application/json",
             ),
-            contents=[
-                json.dumps(context, ensure_ascii=False),
-                image_part,
-            ],
+            contents=contents,
         )
         if not response.text:
             raise RuntimeError("Gemini no devolvió un análisis radiológico.")

@@ -1,0 +1,12 @@
+.env
+.venv/
+__pycache__/
+*.py[cod]
+onco_bridge_c1/.cache/
+onco_bridge_c1/artifacts/meddiffusion_*/
+onco_bridge_c1/artifacts/sample_*.json
+onco_bridge_c1/demo_assets/
+component2_output.json
+end_to_end_output.json
+meddiffusion_references/
+legacy/

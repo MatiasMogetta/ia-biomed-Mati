@@ -7,8 +7,10 @@ from collections import defaultdict
 from pathlib import Path
 
 
-ROOT = Path(__file__).resolve().parents[1]
-INDEX = ROOT / "dataset_clinical_only" / "dataset" / "index.json"
+from onco_bridge.config import DATASET_ROOT, dataset_fingerprint
+
+
+INDEX = DATASET_ROOT / "index.json"
 OUTPUT = Path(__file__).resolve().parent / "data_splits"
 SEED = 20260712
 TRAIN_COUNTS = {"TP": 21, "TN": 21, "FP": 11, "FN": 10, "COMPLEX": 14}
@@ -18,6 +20,7 @@ def write_manifest(name: str, cases: list[dict]) -> None:
     payload = {
         "split": name,
         "seed": SEED,
+        "dataset_fingerprint": dataset_fingerprint(),
         "strategy": "stratified_by_dataset_category",
         "cases": cases,
         "case_ids": [case["case_id"] for case in cases],

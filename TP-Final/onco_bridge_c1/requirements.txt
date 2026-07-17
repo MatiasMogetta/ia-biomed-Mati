@@ -6,3 +6,6 @@ sentence-transformers>=3.0
 streamlit>=1.40
 google-genai>=1.0
 python-dotenv>=1.0
+# Evaluación de máscaras binarias del Componente 2.
+Pillow>=10.0
+numpy>=1.26

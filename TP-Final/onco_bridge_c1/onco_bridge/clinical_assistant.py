@@ -5,8 +5,11 @@ import json
 import os
 from typing import Any
 
-from dotenv import load_dotenv
-
+try:
+    from dotenv import load_dotenv
+except ImportError:
+    def load_dotenv() -> bool:
+        return False
 
 load_dotenv()
 

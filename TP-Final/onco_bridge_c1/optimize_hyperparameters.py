@@ -13,11 +13,11 @@ from pathlib import Path
 import optuna
 
 from onco_bridge import ClinicalPipeline
+from onco_bridge.config import APP_ROOT, ARTIFACTS_DIRECTORY, DATASET_ROOT, GT_DIRECTORY, dataset_fingerprint
 
 
-ROOT = Path(__file__).resolve().parents[1]
-DATASET = ROOT / "dataset_clinical_only" / "dataset"
-OUTPUT = Path(__file__).resolve().parent
+DATASET = DATASET_ROOT
+OUTPUT = ARTIFACTS_DIRECTORY
 
 
 def load_cases(manifest_path: Path) -> list[tuple[dict, dict]]:
@@ -35,12 +35,13 @@ def load_cases(manifest_path: Path) -> list[tuple[dict, dict]]:
 
 
 def metrics(config: dict, cases: list[tuple[dict, dict]]) -> dict:
-    pipeline = ClinicalPipeline(DATASET / "oncology_ground_truth_base", **config)
+    pipeline = ClinicalPipeline(GT_DIRECTORY, **config)
     gt_hits = decisions = tp = fp = fn = tn = 0
     for patient, expected in cases:
         output = pipeline.analyze(patient)
-        ids = {item["gt_id"] for item in output["matched_ground_truths"]}
-        gt_hits += bool(ids & set(expected["correct_gt_ids"]))
+        matches = output["matched_ground_truths"]
+        primary_id = matches[0]["gt_id"] if matches else None
+        gt_hits += primary_id in set(expected["correct_gt_ids"])
         decisions += output["recommendation"] == expected["specialist_decision"]
         predicted_image = output["recommendation"] == "DERIVAR_A_IMAGEN"
         needed = expected["imaging_needed_ground_truth"]
@@ -65,9 +66,10 @@ def main() -> None:
     parser.add_argument("--trials", type=int, default=150, help="Cantidad de configuraciones a evaluar")
     parser.add_argument("--seed", type=int, default=20260712)
     parser.add_argument("--min-sensitivity", type=float, default=0.80)
-    parser.add_argument("--manifest", type=Path, default=OUTPUT / "data_splits" / "train_cases.json")
+    parser.add_argument("--manifest", type=Path, default=APP_ROOT / "data_splits" / "train_cases.json")
     args = parser.parse_args()
     cases = load_cases(args.manifest)
+    OUTPUT.mkdir(exist_ok=True)
     optuna.logging.set_verbosity(optuna.logging.WARNING)
 
     def objective(trial: optuna.Trial) -> float:
@@ -100,7 +102,8 @@ def main() -> None:
     study.optimize(objective, n_trials=args.trials)
     best = study.best_trial
     payload = {
-        "dataset_split": "train", "case_count": len(cases), "seed": args.seed,
+        "dataset_split": "train", "dataset_fingerprint": dataset_fingerprint(),
+        "case_count": len(cases), "seed": args.seed,
         "trials": args.trials, "minimum_sensitivity": args.min_sensitivity,
         "objective": "(sensitivity + specificity + gt_match_accuracy) / 3",
         "best_objective": best.value, "best_config": best.user_attrs["config"],

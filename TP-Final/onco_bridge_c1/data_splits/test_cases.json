@@ -1,6 +1,7 @@
 {
   "split": "test",
   "seed": 20260712,
+  "dataset_fingerprint": "e8643bb5519243a1",
   "strategy": "stratified_by_dataset_category",
   "cases": [
     {
@@ -8,7 +9,7 @@
       "category": "TP",
       "patient_id": "PAT-00102",
       "correct_gt_ids": [
-        "GT-BRCA-001"
+        "GT-RENAL-001"
       ],
       "difficulty": "facil"
     },
@@ -17,7 +18,7 @@
       "category": "TP",
       "patient_id": "PAT-00103",
       "correct_gt_ids": [
-        "GT-BRCA-001"
+        "GT-RENAL-001"
       ],
       "difficulty": "facil"
     },
@@ -26,7 +27,7 @@
       "category": "TP",
       "patient_id": "PAT-00104",
       "correct_gt_ids": [
-        "GT-BRCA-002"
+        "GT-GASTRIC-001"
       ],
       "difficulty": "moderado"
     },
@@ -35,7 +36,7 @@
       "category": "TP",
       "patient_id": "PAT-00105",
       "correct_gt_ids": [
-        "GT-BRCA-003"
+        "GT-RENAL-002"
       ],
       "difficulty": "moderado"
     },
@@ -110,7 +111,7 @@
       "category": "TN",
       "patient_id": "PAT-00216",
       "correct_gt_ids": [
-        "GT-MASTITIS-001"
+        "GT-PIELONEFRITIS-001"
       ],
       "difficulty": "facil"
     },
@@ -119,7 +120,7 @@
       "category": "TN",
       "patient_id": "PAT-00218",
       "correct_gt_ids": [
-        "GT-QUISTE-001"
+        "GT-QUISTERENAL-001"
       ],
       "difficulty": "facil"
     },
@@ -137,7 +138,7 @@
       "category": "TN",
       "patient_id": "PAT-00224",
       "correct_gt_ids": [
-        "GT-PROST-002"
+        "GT-HNF-001"
       ],
       "difficulty": "facil"
     },
@@ -162,7 +163,7 @@
       "category": "FP",
       "patient_id": "PAT-00302",
       "correct_gt_ids": [
-        "GT-MASTITIS-001"
+        "GT-PIELONEFRITIS-001"
       ],
       "difficulty": "dificil"
     },
@@ -171,7 +172,7 @@
       "category": "FP",
       "patient_id": "PAT-00303",
       "correct_gt_ids": [
-        "GT-MASTITIS-001"
+        "GT-PIELONEFRITIS-001"
       ],
       "difficulty": "dificil"
     },
@@ -198,7 +199,7 @@
       "category": "FN",
       "patient_id": "PAT-00401",
       "correct_gt_ids": [
-        "GT-BRCA-002"
+        "GT-GASTRIC-001"
       ],
       "difficulty": "dificil"
     },
@@ -225,7 +226,7 @@
       "category": "FN",
       "patient_id": "PAT-00414",
       "correct_gt_ids": [
-        "GT-PROST-001"
+        "GT-ADRENAL-001"
       ],
       "difficulty": "dificil"
     },
