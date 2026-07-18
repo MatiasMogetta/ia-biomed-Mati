@@ -6,7 +6,7 @@ from pathlib import Path
 
 import streamlit as st
 
-from onco_bridge import ClinicalPipeline, RadiologyAssistant, SyntheticReferenceGenerator
+from onco_bridge import ClinicalPipeline, LocalDiffusionReferenceGenerator, RadiologyAssistant, SyntheticReferenceGenerator
 from onco_bridge.clinical_assistant import ClinicalAssistant, local_summary
 from onco_bridge.config import DEFAULT_CONFIG_PATH, GT_DIRECTORY, load_pipeline_config
 
@@ -34,6 +34,11 @@ def get_radiology_assistant() -> RadiologyAssistant:
 @st.cache_resource
 def get_reference_generator() -> SyntheticReferenceGenerator:
     return SyntheticReferenceGenerator()
+
+
+@st.cache_resource
+def get_local_reference_generator() -> LocalDiffusionReferenceGenerator:
+    return LocalDiffusionReferenceGenerator()
 
 
 def initialise_state() -> None:
@@ -115,6 +120,7 @@ def show_c1(external_consent: bool) -> None:
 def show_c2(external_consent: bool) -> None:
     assistant = get_radiology_assistant()
     generator = get_reference_generator()
+    local_generator = get_local_reference_generator()
     c1_output = st.session_state.c1_output
     st.header("Componente 2 — Asistencia radiológica")
     st.write("Usa las hipótesis e instrucciones de C1 para orientar la lectura de una imagen cargada por el especialista.")
@@ -159,6 +165,21 @@ def show_c2(external_consent: bool) -> None:
                 }]
             except Exception as error:
                 st.error(f"No se pudo generar la referencia: {error}")
+    if st.button("Generar referencia local (GPU)", key="generate_c2_reference_local"):
+        if not local_generator.available:
+            st.error("Faltan dependencias locales. Ejecutá: pip install -r requirements.txt")
+        else:
+            try:
+                with st.spinner("Descargando/cargando Stable Diffusion y generando la referencia local…"):
+                    generated = local_generator.generate(c1_output)
+                st.session_state.generated_references = [{
+                    "name": f"Stable Diffusion local — {generated.gt_id}",
+                    "data": generated.data,
+                    "mime_type": generated.mime_type,
+                    "limitation": generated.limitation,
+                }]
+            except Exception as error:
+                st.error(f"No se pudo generar la referencia local: {error}")
     for generated in st.session_state.generated_references:
         st.image(generated["data"], caption=generated["name"], use_container_width=True)
         st.caption(generated["limitation"])

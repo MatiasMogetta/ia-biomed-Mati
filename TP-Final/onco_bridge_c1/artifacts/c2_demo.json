@@ -1,0 +1,21 @@
+{
+  "patient_id": "PAT-00101",
+  "segmentation": {
+    "regions_of_interest": []
+  },
+  "findings": "La imagen proporcionada corresponde a un patrón de prueba técnico no médico con la leyenda 'NON-MEDICAL TEST IMAGE / EXPECT: NOT EVALUABLE'. No contiene estructuras anatómicas ni información clínica que permita realizar una evaluación diagnóstica.",
+  "classification": "imagen_no_evaluable",
+  "confidence": 1.0,
+  "final_recommendation": "Se requiere la carga de un estudio de imagenología médica real (TC de abdomen trifásico o RM de abdomen) para poder evaluar las hipótesis de masa renal o suprarrenal izquierda planteadas en el contexto clínico del paciente.",
+  "next_steps": [
+    "Solicitar y cargar el estudio de TC de abdomen trifásico correspondiente al paciente.",
+    "Verificar la integridad y el formato de los archivos DICOM antes de una nueva evaluación."
+  ],
+  "token_usage": {
+    "prompt_tokens": 3109,
+    "completion_tokens": 220,
+    "total_tokens": 4005,
+    "model": "gemini-3.5-flash"
+  },
+  "limitations": "ROI descriptivas generadas por IA; no constituyen segmentación pixel a pixel ni informe radiológico definitivo."
+}

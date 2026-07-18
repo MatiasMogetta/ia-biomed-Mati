@@ -57,6 +57,7 @@ TP-Final/
 │   ├── run_end_to_end.py
 │   ├── prepare_meddiffusion_references.py
 │   ├── generate_reference_image.py
+│   ├── generate_local_reference.py
 │   ├── split_dataset.py
 │   ├── optimize_hyperparameters.py
 │   ├── evaluate.py
@@ -173,6 +174,16 @@ python onco_bridge_c1\generate_reference_image.py onco_bridge_c1\artifacts\c1_ca
 ```
 
 Genera una imagen y `metadata.json`. Puede cargarse en Streamlit desde Componente 2 o pasarse mediante `--reference-image`. Es una referencia educativa sintetizada por un modelo generalista: no es un estudio real, no está validada clínicamente y no debe utilizarse como evidencia diagnóstica.
+
+#### Alternativa sin API: Stable Diffusion local
+
+Para un proof of concept sin cuota de Gemini, el proyecto incluye un generador local basado en el modelo público `stable-diffusion-v1-5/stable-diffusion-v1-5` y la biblioteca Diffusers. En la primera ejecución descarga los pesos; luego los reutiliza desde caché. Requiere GPU CUDA; el script rechaza CPU porque sería demasiado lento. En GPUs de menos de 8 GB activa automáticamente CPU offload para reducir VRAM, a costa de mayor tiempo de generación.
+
+```powershell
+python onco_bridge_c1\generate_local_reference.py onco_bridge_c1\artifacts\c1_case_001.json --device cuda --output-dir generated_references\case_001_local
+```
+
+También está disponible como botón **“Generar referencia local (GPU)”** dentro de Componente 2 en Streamlit. Produce un PNG y `metadata_local.json`. El modelo es generalista y el resultado es solo una referencia visual sintética educativa, no una imagen médica validada.
 
 #### Opción GPU externa: 3D MedDiffusion en Google Colab
 

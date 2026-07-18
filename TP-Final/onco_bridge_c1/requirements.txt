@@ -9,3 +9,7 @@ python-dotenv>=1.0
 # Evaluación de máscaras binarias del Componente 2.
 Pillow>=10.0
 numpy>=1.26
+# Generador local de referencias sintéticas para C2 (usa GPU CUDA).
+diffusers>=0.31
+accelerate>=1.0
+safetensors>=0.4
