@@ -179,6 +179,7 @@ python onco_bridge_c1\run_end_to_end.py dataset_clinical_only\dataset\clinical_c
 Este único comando encadena C1 y C2, guarda el JSON final y crea `onco_bridge_c1\artifacts\end_to_end_case_001_radiology_reference.png`. La ruta del PNG queda también dentro de `generated_radiology_reference.image_path` del JSON. No requiere Gemini: usa Stable Diffusion local y CUDA.
 
 ### 9. Abrir la interfaz
+En esta interfaz de Usuario se aplica el funcionamiento de los componentes 1 y 2 como protótipo mínimo viable (MVP), para entender cómo se implementaría el sistema.
 
 ```powershell
 streamlit run onco_bridge_c1\app.py
