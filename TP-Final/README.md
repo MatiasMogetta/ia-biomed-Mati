@@ -109,23 +109,7 @@ Genera manifiestos con punteros a los casos originales, sin copiarlos ni modific
 - `onco_bridge_c1/data_splits/train_cases.json`: 77 casos.
 - `onco_bridge_c1/data_splits/test_cases.json`: 33 casos.
 
-### 4. Correr el Componente 1
-
-El siguiente comando analiza un caso del dataset y muestra el JSON en consola:
-
-```powershell
-python onco_bridge_c1\run_component1.py dataset_clinical_only\dataset\clinical_cases\case_001\input.json
-```
-
-Para guardar el resultado:
-
-```powershell
-python onco_bridge_c1\run_component1.py dataset_clinical_only\dataset\clinical_cases\case_001\input.json --output onco_bridge_c1\artifacts\c1_case_001.json
-```
-
-El output visible contiene `matched_ground_truths`, probabilidades, instrucciones para el radiólogo, `recommendation`, `urgency` y uso estimado de tokens. Si todavía no existe una configuración optimizada, se usan valores por defecto seguros.
-
-### 5. Optimizar hiperparámetros solo con train
+### 4. Optimizar hiperparámetros solo con train
 
 ```powershell
 python onco_bridge_c1\optimize_hyperparameters.py --trials 150 --min-sensitivity 0.80
@@ -137,6 +121,22 @@ Genera:
 - `onco_bridge_c1/artifacts/optimization_trials.csv`.
 
 La función objetivo pesa por igual sensibilidad, especificidad y precisión del GT principal. Una huella del dataset impide cargar accidentalmente pesos aprendidos con la versión anterior. No se debe mirar test durante la optimización.
+
+### 5. Correr el Componente 1
+
+El siguiente comando analiza un caso del dataset y muestra el JSON en consola. C1 carga automáticamente `best_hyperparameters.json` generado en el paso anterior:
+
+```powershell
+python onco_bridge_c1\run_component1.py dataset_clinical_only\dataset\clinical_cases\case_001\input.json
+```
+
+Para guardar el resultado:
+
+```powershell
+python onco_bridge_c1\run_component1.py dataset_clinical_only\dataset\clinical_cases\case_001\input.json --output onco_bridge_c1\artifacts\c1_case_001.json
+```
+
+El output visible contiene `matched_ground_truths`, probabilidades, instrucciones para el radiólogo, `recommendation`, `urgency` y uso estimado de tokens.
 
 ### 6. Evaluar C1
 
