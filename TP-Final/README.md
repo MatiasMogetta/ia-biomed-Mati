@@ -185,6 +185,8 @@ streamlit run onco_bridge_c1\app.py
 ```
 
 En la barra lateral se elige Componente 1 o Componente 2. C2 muestra el contexto de C1 y genera la referencia localmente; no carga ni envía estudios de imágenes.
+- Para correr el **componente 1** se debe clickear en el checkbox que garantiza que el output está anonimizado.
+- Para correr el **componente 2**, se debe haber corrido previamente el componente 1.
 
 ## Dataset y resultados actuales
 
