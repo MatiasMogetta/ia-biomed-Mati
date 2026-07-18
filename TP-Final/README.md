@@ -31,7 +31,7 @@ flowchart LR
     E --> F["Asistente conversacional Gemini"]
     E --> H["Componente 2"]
     I["Estudio CT/MRI del paciente"] --> H
-    J["Referencias sintéticas 3D MedDiffusion opcionales"] --> H
+    J["Referencia sintética Gemini Image o 3D MedDiffusion"] --> H
     H --> K["ROI descriptivas, hallazgos y recomendación"]
 ```
 
@@ -56,12 +56,14 @@ TP-Final/
 │   ├── run_component2.py
 │   ├── run_end_to_end.py
 │   ├── prepare_meddiffusion_references.py
+│   ├── generate_reference_image.py
 │   ├── split_dataset.py
 │   ├── optimize_hyperparameters.py
 │   ├── evaluate.py
 │   ├── evaluate_component2.py
 │   ├── data_splits/
 │   ├── artifacts/
+│   ├── notebooks/                         # Notebook Colab para 3D MedDiffusion
 │   └── onco_bridge/
 └── legacy/                               # archivo local anterior, excluido de Git
 ```
@@ -160,15 +162,31 @@ python onco_bridge_c1\evaluate.py
 
 Los reportes se guardan en `onco_bridge_c1/artifacts/`. El evaluador verifica que el **primer GT** sea correcto, además de derivación, sensibilidad, especificidad, urgencia, conclusividad, calibración y correspondencia del prompt MedDiffusion.
 
-### 7. Preparar referencias para 3D MedDiffusion
+### 7. Generar referencias sintéticas para C2
 
-El dataset no contiene imágenes. Este script extrae de C1 los prompts, negative prompts, modalidades y nombres sugeridos:
+#### Alternativa integrada: Gemini Image
+
+Genera una ilustración radiológica sintética desde el prompt de la hipótesis principal de C1. Reutiliza `GEMINI_API_KEY`, pero requiere que la clave tenga acceso al modelo configurado en `GEMINI_IMAGE_MODEL`.
+
+```powershell
+python onco_bridge_c1\generate_reference_image.py onco_bridge_c1\artifacts\c1_case_001.json --output-dir generated_references\case_001
+```
+
+Genera una imagen y `metadata.json`. Puede cargarse en Streamlit desde Componente 2 o pasarse mediante `--reference-image`. Es una referencia educativa sintetizada por un modelo generalista: no es un estudio real, no está validada clínicamente y no debe utilizarse como evidencia diagnóstica.
+
+#### Opción GPU externa: 3D MedDiffusion en Google Colab
+
+El notebook [meddiffusion_colab_component2.ipynb](onco_bridge_c1/notebooks/meddiffusion_colab_component2.ipynb) implementa inferencia del [repositorio oficial 3D MedDiffusion](https://github.com/ShanghaiTech-IMPACT/3D-MedDiffusion), exporta un corte PNG y explica cómo adjuntarlo a C2. Requiere una GPU con al menos 40 GB de VRAM según ese repositorio.
+
+#### Exportar manifiesto de prompts
+
+El dataset no contiene imágenes. Este script conserva los prompts, negative prompts, modalidades y nombres sugeridos por C1:
 
 ```powershell
 python onco_bridge_c1\prepare_meddiffusion_references.py onco_bridge_c1\artifacts\c1_case_001.json --output-dir meddiffusion_references\case_001
 ```
 
-El archivo `manifest.json` resultante es la entrada reproducible para ejecutar 3D MedDiffusion en su entorno propio. La ejecución del modelo 3D no se incluye en este repositorio porque requiere pesos, hardware y configuración que no fueron entregados con el dataset. Las imágenes generadas deben guardarse con los nombres indicados por el manifiesto.
+El archivo `manifest.json` es la entrada reproducible para elegir anatomía y documentar la referencia. Los pesos públicos de 3D MedDiffusion son condicionales por anatomía/modalidad, no por texto ni patología, por lo que no pueden garantizar una lesión específica.
 
 ### 8. Correr el Componente 2
 
@@ -179,7 +197,7 @@ python onco_bridge_c1\create_demo_assets.py
 python onco_bridge_c1\run_component2.py onco_bridge_c1\artifacts\c1_case_001.json onco_bridge_c1\demo_assets\non_medical_test_image.png --modality abdominal_CT --view "prueba técnica" --output onco_bridge_c1\artifacts\c2_demo.json
 ```
 
-El output esperado es un JSON visible con clasificación `imagen_no_evaluable`: esto valida la integración, no la capacidad radiológica. Para una prueba significativa, reemplazar la imagen por una captura PNG/JPG/WEBP de CT/MRI y agregar opcionalmente una o más referencias con `--reference-image ruta\referencia.png`. C2 separa explícitamente el estudio real de las referencias. Las ROI actuales son descriptivas; no constituyen una máscara pixel a pixel validada.
+El output esperado es un JSON visible con clasificación `imagen_no_evaluable`: esto valida la integración, no la capacidad radiológica. Para una prueba significativa, reemplazar la imagen por una captura PNG/JPG/WEBP de CT/MRI y agregar opcionalmente una o más referencias con `--reference-image ruta\referencia.png`. En Streamlit también se puede generar una referencia Gemini Image directamente desde C2. C2 separa explícitamente el estudio real de las referencias. Las ROI actuales son descriptivas; no constituyen una máscara pixel a pixel validada.
 
 ### 9. Correr el flujo end-to-end
 
@@ -228,7 +246,7 @@ Antes de la entrega se debe ejecutar la optimización con BGE-M3 y reemplazar es
 - Hay una inconsistencia nominal entre los ejemplos de la consigna (`GT-LUNG-*`, `GT-HCC-*`, `GT-HAMARTOMA-*`) y los archivos realmente entregados (`GT-PULM-*`, `GT-HIGADO-*` y otros diferenciales). El sistema toma como fuente de verdad los IDs del dataset.
 - C2 usa Gemini Vision sobre imágenes renderizadas, no procesa volúmenes DICOM/NIfTI completos.
 - Las ROI de C2 son descriptivas; una evaluación IoU real exige un segmentador, máscaras y un dataset radiológico anotado.
-- 3D MedDiffusion se integra mediante manifiestos y referencias opcionales, pero la inferencia del generador no está empaquetada en este repositorio.
+- Gemini Image y 3D MedDiffusion producen referencias sintéticas educativas; ninguna sustituye imágenes reales ni está validada para diagnóstico. Los pesos públicos de 3D MedDiffusion controlan anatomía/modalidad, no lesiones específicas.
 - Para producción harían falta anonimización DICOM, cifrado, control de acceso, auditoría, versionado de modelos, monitoreo de drift, validación clínica y un procedimiento de contingencia.
 
 Trabajo futuro prioritario: adaptar C2 a DICOM/NIfTI, incorporar un segmentador médico validado, construir un dataset multimodal con máscaras de especialistas, calibrar probabilidades y evaluar sesgos por edad, sexo y centro de adquisición.

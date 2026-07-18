@@ -1,0 +1,38 @@
+{
+  "dataset_split": "train",
+  "dataset_fingerprint": "e8643bb5519243a1",
+  "case_count": 77,
+  "seed": 20260712,
+  "trials": 150,
+  "minimum_sensitivity": 0.8,
+  "objective": "(sensitivity + specificity + gt_match_accuracy) / 3",
+  "best_objective": 0.6287268823500708,
+  "best_config": {
+    "scoring_weights": [
+      0.229457,
+      0.232214,
+      0.171297,
+      0.061177,
+      0.079676,
+      0.226181
+    ],
+    "raw_weight": 0.7494231154081757,
+    "referral_threshold": 0.3698220187965874,
+    "benign_no_referral_threshold": 0.32175617533633283,
+    "min_match_probability": 0.2275665254897463,
+    "semantic_weight": 0.32987718710840574
+  },
+  "train_metrics": {
+    "gt_match_accuracy": 0.36363636363636365,
+    "referral_accuracy": 0.6493506493506493,
+    "sensitivity": 0.8703703703703703,
+    "specificity": 0.6521739130434783,
+    "confusion_matrix": {
+      "TP": 47,
+      "FP": 8,
+      "FN": 7,
+      "TN": 15
+    }
+  },
+  "warning": "No usar estos resultados como métrica final. Evaluar una única vez con test_cases.json."
+}

@@ -6,7 +6,7 @@ from pathlib import Path
 
 import streamlit as st
 
-from onco_bridge import ClinicalPipeline, RadiologyAssistant
+from onco_bridge import ClinicalPipeline, RadiologyAssistant, SyntheticReferenceGenerator
 from onco_bridge.clinical_assistant import ClinicalAssistant, local_summary
 from onco_bridge.config import DEFAULT_CONFIG_PATH, GT_DIRECTORY, load_pipeline_config
 
@@ -31,12 +31,18 @@ def get_radiology_assistant() -> RadiologyAssistant:
     return RadiologyAssistant()
 
 
+@st.cache_resource
+def get_reference_generator() -> SyntheticReferenceGenerator:
+    return SyntheticReferenceGenerator()
+
+
 def initialise_state() -> None:
     for key, value in {
         "c1_output": None,
         "c2_output": None,
         "chat": [],
         "generated_summary": None,
+        "generated_references": [],
     }.items():
         if key not in st.session_state:
             st.session_state[key] = value
@@ -46,6 +52,7 @@ def reset_after_c1() -> None:
     st.session_state.c2_output = None
     st.session_state.chat = []
     st.session_state.generated_summary = None
+    st.session_state.generated_references = []
 
 
 def show_c1(external_consent: bool) -> None:
@@ -107,6 +114,7 @@ def show_c1(external_consent: bool) -> None:
 
 def show_c2(external_consent: bool) -> None:
     assistant = get_radiology_assistant()
+    generator = get_reference_generator()
     c1_output = st.session_state.c1_output
     st.header("Componente 2 — Asistencia radiológica")
     st.write("Usa las hipótesis e instrucciones de C1 para orientar la lectura de una imagen cargada por el especialista.")
@@ -126,6 +134,34 @@ def show_c2(external_consent: bool) -> None:
             st.markdown(f"**{item['gt_id']} — {item['icd_10_description']}**")
             st.code(instructions.get("meddiffusion_reference_prompt", "Sin prompt"), language=None)
             st.caption("Negative prompt: " + instructions.get("meddiffusion_negative_prompt", "Sin negative prompt"))
+
+    st.subheader("Referencia sintética opcional")
+    st.caption(
+        "Podés generar una ilustración educativa con Gemini Image para usar como referencia visual. "
+        "No es una imagen del paciente ni una referencia radiológica validada."
+    )
+    if generator.available and not external_consent:
+        st.warning("Confirmá el envío al proveedor de IA para generar una referencia sintética.")
+    if st.button("Generar referencia con Gemini Image", key="generate_c2_reference"):
+        if not generator.available:
+            st.error("Configurá GEMINI_API_KEY antes de generar referencias sintéticas.")
+        elif not external_consent:
+            st.error("Se requiere confirmación de envío al proveedor de IA.")
+        else:
+            try:
+                with st.spinner("Generando referencia sintética educativa…"):
+                    generated = generator.generate(c1_output)
+                st.session_state.generated_references = [{
+                    "name": f"Gemini Image — {generated.gt_id}",
+                    "data": generated.data,
+                    "mime_type": generated.mime_type,
+                    "limitation": generated.limitation,
+                }]
+            except Exception as error:
+                st.error(f"No se pudo generar la referencia: {error}")
+    for generated in st.session_state.generated_references:
+        st.image(generated["data"], caption=generated["name"], use_container_width=True)
+        st.caption(generated["limitation"])
 
     image = st.file_uploader("Cargar estudio de imagen (PNG, JPG o WEBP)", type=["png", "jpg", "jpeg", "webp"], key="c2_image")
     references = st.file_uploader(
@@ -156,7 +192,10 @@ def show_c2(external_consent: bool) -> None:
                         modality,
                         view or "no especificada",
                         acquisition_date,
-                        [(reference.getvalue(), reference.type or "image/png") for reference in references],
+                        (
+                            [(reference.getvalue(), reference.type or "image/png") for reference in references]
+                            + [(reference["data"], reference["mime_type"]) for reference in st.session_state.generated_references]
+                        ),
                     )
             except Exception as error:
                 st.error(f"No se pudo completar el análisis radiológico: {error}")
