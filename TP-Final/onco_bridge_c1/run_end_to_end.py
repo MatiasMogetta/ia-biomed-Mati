@@ -16,7 +16,7 @@ parser.add_argument("--config", type=Path, default=DEFAULT_CONFIG_PATH)
 parser.add_argument("--output", type=Path, default=Path("end_to_end_output.json"))
 parser.add_argument("--reference-output", type=Path, help="Ruta del PNG sintético generado; por defecto queda junto al JSON.")
 parser.add_argument("--reference-device", choices=["auto", "cuda", "cpu"], default="auto")
-parser.add_argument("--reference-steps", type=int, default=20, help="Pasos de difusión de la referencia local.")
+parser.add_argument("--reference-steps", type=int, default=60, help="Pasos de difusión de la referencia local.")
 parser.add_argument("--reference-seed", type=int, default=20260718)
 args = parser.parse_args()
 
