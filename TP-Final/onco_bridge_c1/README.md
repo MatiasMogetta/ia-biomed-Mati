@@ -4,4 +4,4 @@ Esta carpeta contiene la implementación de los dos componentes, la interfaz, lo
 
 La guía completa y vigente se encuentra en el [`README.md` raíz](../README.md). Todos los comandos deben ejecutarse desde la carpeta `TP-Final` para que las rutas sean reproducibles.
 
-Los datos activos están en `../dataset_clinical_only/`. La carpeta `../legacy/` se conserva únicamente como historial y no debe usarse para ejecutar ni evaluar el sistema actual.
+Los datos activos están en `../dataset_clinical_only/`.

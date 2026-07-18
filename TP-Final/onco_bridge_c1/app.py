@@ -78,10 +78,15 @@ def show_c2() -> None:
     if not output:
         st.info("Primero completá el análisis en Componente 1.")
         return
-    with st.expander("Contexto recibido desde C1"):
+    with st.expander("Guía esperada desde C1", expanded=True):
+        st.caption("Estos prompts orientan la lectura y la generación sintética; no son hallazgos confirmados del paciente.")
         for item in output.get("matched_ground_truths", []):
             st.markdown(f"- **{item['icd_10_description']}** — {item['match_probability']:.0%}")
-            st.caption(item.get("radiologist_instructions", {}).get("meddiffusion_reference_prompt", ""))
+            instructions = item.get("radiologist_instructions", {})
+            st.markdown("**Qué se espera observar (positive prompt):**")
+            st.code(instructions.get("meddiffusion_reference_prompt", "No disponible"), language=None)
+            st.markdown("**Qué no se espera observar / evitar (negative prompt):**")
+            st.code(instructions.get("meddiffusion_negative_prompt", "No disponible"), language=None)
     if st.button("Generar referencia local (GPU)", type="primary"):
         try:
             with st.spinner("Cargando Stable Diffusion y generando la referencia…"):

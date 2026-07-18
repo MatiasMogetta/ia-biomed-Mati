@@ -12,12 +12,12 @@ Es un prototipo académico sobre datos sintéticos. **No está validado para uso
 El contrato funcional, las métricas, la estructura de entrega y los porcentajes de evaluación no cambiaron. Los cambios están en los ejemplos y en la cobertura clínica:
 
 - Los ejemplos de carcinoma mamario/fibroadenoma/mastitis pasaron a adenocarcinoma pulmonar/hamartoma/neumonía.
-- La base sigue teniendo **30 GT y 110 casos**, pero elimina mama y próstata porque esas regiones no están contempladas por el flujo de 3D MedDiffusion propuesto.
+- La base sigue teniendo **30 GT y 110 casos**, y se concentra en patologías de cabeza-cuello, tórax y abdomen.
 - Se reemplazaron 10 GT antiguos por patologías renales, gástricas, hepatobiliares y suprarrenales: carcinoma renal, masa renal temprana, angiomiolipoma, quiste renal, pielonefritis, cáncer gástrico, colangiocarcinoma, hiperplasia nodular focal, carcinoma adrenocortical y adenoma suprarrenal.
 - Las guías de imagen y los prompts de referencia ahora se concentran en **CT/MRI de cabeza-cuello, tórax y abdomen**.
 - Los ejemplos de input/output, estudios radiológicos, próximos pasos y estructura del dataset fueron actualizados para esas patologías.
 
-La consigna vigente es [OncoBridge_AI_Assignment.md](OncoBridge_AI_Assignment.md). La versión anterior se conserva localmente para trazabilidad dentro de `legacy/`, está excluida de Git y no es utilizada por el código.
+La consigna vigente es [OncoBridge_AI_Assignment.md](OncoBridge_AI_Assignment.md).
 
 ## Arquitectura
 
@@ -54,19 +54,15 @@ TP-Final/
 │   ├── run_component1.py
 │   ├── run_component2.py
 │   ├── run_end_to_end.py
-│   ├── prepare_meddiffusion_references.py
-│   ├── generate_local_reference.py
 │   ├── split_dataset.py
 │   ├── optimize_hyperparameters.py
 │   ├── evaluate.py
 │   ├── data_splits/
 │   ├── artifacts/
-│   ├── notebooks/                         # Notebook Colab para 3D MedDiffusion
 │   └── onco_bridge/
-└── legacy/                               # archivo local anterior, excluido de Git
 ```
 
-Los archivos producidos durante una corrida (`artifacts/`, `.cache/` y `generated_references/`) no son parte del código fuente: se regeneran con los comandos de esta guía y están excluidos de Git cuando corresponde.
+Los archivos producidos durante una corrida (`artifacts/`, `.cache/` y `generated_references/`) no son parte del código fuente: se regeneran con los comandos de esta guía y están excluidos de Git.
 
 ## Guía de ejecución desde cero (PowerShell)
 
@@ -162,35 +158,9 @@ Los 110 casos:
 python onco_bridge_c1\evaluate.py
 ```
 
-Los reportes se guardan en `onco_bridge_c1/artifacts/`. El evaluador verifica que el **primer GT** sea correcto, además de derivación, sensibilidad, especificidad, urgencia, conclusividad, calibración y correspondencia del prompt MedDiffusion.
+Los reportes se guardan en `onco_bridge_c1/artifacts/`. El evaluador verifica que el **primer GT** sea correcto, además de derivación, sensibilidad, especificidad, urgencia, conclusividad, calibración y correspondencia de la guía radiológica.
 
-### 7. Generar referencias sintéticas para C2
-
-#### Stable Diffusion local
-
-Para un proof of concept sin cuota de Gemini, el proyecto incluye un generador local basado en el modelo público `stable-diffusion-v1-5/stable-diffusion-v1-5` y la biblioteca Diffusers. En la primera ejecución descarga los pesos; luego los reutiliza desde caché. Requiere GPU CUDA; el script rechaza CPU porque sería demasiado lento. En GPUs de menos de 8 GB activa automáticamente CPU offload para reducir VRAM, a costa de mayor tiempo de generación.
-
-```powershell
-python onco_bridge_c1\generate_local_reference.py onco_bridge_c1\artifacts\c1_case_001.json --device cuda --output-dir generated_references\case_001_local
-```
-
-También está disponible como botón **“Generar referencia local (GPU)”** dentro de Componente 2 en Streamlit. Produce un PNG y `metadata_local.json`. El modelo es generalista y el resultado es solo una referencia visual sintética educativa, no una imagen médica validada. Es la alternativa elegida para el entregable: funciona localmente con CUDA y evita el requisito de 40 GB de VRAM de 3D MedDiffusion.
-
-#### Opción GPU externa: 3D MedDiffusion en Google Colab
-
-El notebook [meddiffusion_colab_component2.ipynb](onco_bridge_c1/notebooks/meddiffusion_colab_component2.ipynb) implementa inferencia del [repositorio oficial 3D MedDiffusion](https://github.com/ShanghaiTech-IMPACT/3D-MedDiffusion), exporta un corte PNG y explica cómo adjuntarlo a C2. Requiere una GPU con al menos 40 GB de VRAM según ese repositorio.
-
-#### Exportar manifiesto de prompts
-
-El dataset no contiene imágenes. Este script conserva los prompts, negative prompts, modalidades y nombres sugeridos por C1:
-
-```powershell
-python onco_bridge_c1\prepare_meddiffusion_references.py onco_bridge_c1\artifacts\c1_case_001.json --output-dir meddiffusion_references\case_001
-```
-
-El archivo `manifest.json` es la entrada reproducible para elegir anatomía y documentar la referencia. Los pesos públicos de 3D MedDiffusion son condicionales por anatomía/modalidad, no por texto ni patología, por lo que no pueden garantizar una lesión específica.
-
-### 8. Correr el Componente 2
+### 7. Correr el Componente 2
 
 El objetivo del componente es generar la guía visual prospectiva para el radiólogo. Con el JSON de C1 ya generado, el siguiente comando produce un PNG y un JSON de metadatos en `generated_references\case_001_local\`:
 
@@ -200,7 +170,7 @@ python onco_bridge_c1\run_component2.py onco_bridge_c1\artifacts\c1_case_001.jso
 
 La imagen `local_reference_<GT_ID>.png` es el output visual que acompaña al JSON de C1. No representa al paciente ni se interpreta como evidencia clínica.
 
-### 9. Correr el flujo end-to-end
+### 8. Correr el flujo end-to-end
 
 ```powershell
 python onco_bridge_c1\run_end_to_end.py dataset_clinical_only\dataset\clinical_cases\case_001\input.json --reference-device cuda --output onco_bridge_c1\artifacts\end_to_end_case_001.json
@@ -208,7 +178,7 @@ python onco_bridge_c1\run_end_to_end.py dataset_clinical_only\dataset\clinical_c
 
 Este único comando encadena C1 y C2, guarda el JSON final y crea `onco_bridge_c1\artifacts\end_to_end_case_001_radiology_reference.png`. La ruta del PNG queda también dentro de `generated_radiology_reference.image_path` del JSON. No requiere Gemini: usa Stable Diffusion local y CUDA.
 
-### 10. Abrir la interfaz
+### 9. Abrir la interfaz
 
 ```powershell
 streamlit run onco_bridge_c1\app.py
@@ -236,7 +206,7 @@ Antes de la entrega se debe ejecutar la optimización con BGE-M3 y reemplazar es
 - La precisión de match de GT puede ser baja porque el problema usa solo **30 ground truths y 110 casos sintéticos**; varias entidades comparten síntomas, estudios y diferenciales. El RAG recupera similitud léxica/semántica y el optimizador ajusta pesos, pero **no entrena un modelo predictivo supervisado** ni puede aprender patrones clínicos nuevos a partir de una cohorte tan pequeña. Para mejorar de forma sustentable se requeriría una base mucho mayor, curada y balanceada, con etiquetas revisadas por especialistas, particiones externas por centro y el entrenamiento/validación de un modelo de machine learning supervisado, además de calibración y análisis de sesgos. La optimización de hiperparámetros actual solo elige pesos de scoring; no sustituye ese entrenamiento.
 - Los GT contienen instrucciones anatómicas prototípicas; la lateralidad debe ser revisada contra el caso antes de usar la guía.
 - Hay una inconsistencia nominal entre los ejemplos de la consigna (`GT-LUNG-*`, `GT-HCC-*`, `GT-HAMARTOMA-*`) y los archivos realmente entregados (`GT-PULM-*`, `GT-HIGADO-*` y otros diferenciales). El sistema toma como fuente de verdad los IDs del dataset.
-- No se utilizó 3D MedDiffusion en la aplicación local porque su repositorio oficial informa un mínimo de **40 GB de VRAM** para inferencia; ese hardware no está disponible en el entorno del proyecto. Se documentó una alternativa en Colab, pero para el entregable se eligió Stable Diffusion local, que puede ejecutarse con CUDA y genera la referencia rápidamente en una GPU de consumo. Sigue siendo un modelo generalista, no un generador médico validado.
+- No se utilizó 3D MedDiffusion en la aplicación local porque su repositorio oficial informa un mínimo de **40 GB de VRAM** para inferencia; ese hardware no está disponible en el entorno del proyecto. Para el entregable se eligió Stable Diffusion local, que puede ejecutarse con CUDA y genera la referencia rápidamente en una GPU de consumo. Sigue siendo un modelo generalista, no un generador médico validado.
 - C2 fue redefinido como **guía visual prospectiva**: en lugar de detectar hallazgos sobre una imagen médica real, genera una imagen sintética de lo que se espera hallar según C1 y la entrega al radiólogo como orientación. No debe confundirse con una imagen del paciente ni con una predicción clínica.
 - La futura mejora prioritaria es incorporar estudios reales anonimizados y anotados, y entrenar/validar un detector de objetos o un modelo de segmentación para localizar la patología en la imagen real. Recién entonces serían pertinentes métricas como IoU, sensibilidad y especificidad por píxel.
 - Para producción harían falta anonimización DICOM, cifrado, control de acceso, auditoría, versionado de modelos, monitoreo de drift, validación clínica y un procedimiento de contingencia.
