@@ -1,14 +1,24 @@
 """Generación local de referencias educativas con Stable Diffusion."""
 from __future__ import annotations
 
+from dataclasses import dataclass
 from io import BytesIO
 from typing import Any
 
-from .reference_generator import GeneratedReference, SyntheticReferenceGenerator
-
-
 DEFAULT_LOCAL_MODEL = "stable-diffusion-v1-5/stable-diffusion-v1-5"
 _PIPELINES: dict[tuple[str, str, bool], Any] = {}
+
+
+@dataclass
+class GeneratedReference:
+    """Referencia visual sintética, exclusivamente para el PoC educativo."""
+
+    data: bytes
+    mime_type: str
+    model: str
+    gt_id: str
+    prompt: str
+    limitation: str
 
 
 class LocalDiffusionReferenceGenerator:
@@ -66,6 +76,26 @@ class LocalDiffusionReferenceGenerator:
         _PIPELINES[key] = pipeline
         return _PIPELINES[key]
 
+    @staticmethod
+    def _build_prompt(component_1_output: dict[str, Any]) -> tuple[str, dict[str, Any]]:
+        matches = component_1_output.get("matched_ground_truths", [])
+        if not matches:
+            raise ValueError("C1 no devolvió hipótesis; no hay referencia visual para generar.")
+        match = matches[0]
+        instructions = match.get("radiologist_instructions", {})
+        modality = ", ".join(instructions.get("suggested_modalities", [])) or "CT o MRI"
+        positive = instructions.get("meddiffusion_reference_prompt", "")
+        negative = instructions.get("meddiffusion_negative_prompt", "")
+        prompt = (
+            "Generate exactly one synthetic educational radiology-style reference image. "
+            "This is not a patient study, not diagnostic evidence, and must contain no text, labels, "
+            "identifiers, watermarks, or annotations. Use grayscale medical-imaging appearance only. "
+            f"Suggested modality: {modality}. Expected visual pattern: {positive}. "
+            f"Avoid these features: {negative}. "
+            "The image is only an illustrative pattern reference for a radiologist."
+        )
+        return prompt, match
+
     def generate(
         self,
         component_1_output: dict[str, Any],
@@ -77,7 +107,7 @@ class LocalDiffusionReferenceGenerator:
             raise RuntimeError("Faltan diffusers y torch. Ejecutá: pip install -r requirements.txt")
         import torch
 
-        prompt, match = SyntheticReferenceGenerator().build_prompt(component_1_output)
+        prompt, match = self._build_prompt(component_1_output)
         local_device = self._device(device)
         if local_device == "cpu":
             raise RuntimeError(

@@ -1,35 +1,38 @@
-"""Ejecuta el Componente 2 desde consola con un output de C1 y una imagen."""
+"""Ejecuta C2: genera una guía visual sintética desde el output de C1."""
 from __future__ import annotations
 
 import argparse
 import json
-import mimetypes
 from pathlib import Path
 
-from onco_bridge.component2 import RadiologyAssistant
+from onco_bridge.local_reference_generator import LocalDiffusionReferenceGenerator
 
 
-parser = argparse.ArgumentParser(description="OncoBridge AI - Componente 2")
+parser = argparse.ArgumentParser(description="OncoBridge AI - Componente 2 (referencia visual local)")
 parser.add_argument("c1_output", type=Path, help="JSON producido por el Componente 1")
-parser.add_argument("image", type=Path, help="Imagen PNG, JPG o WEBP del estudio")
-parser.add_argument("--modality", required=True, help="Ej.: chest_CT, abdominal_CT, abdominal_MRI")
-parser.add_argument("--view", default="no especificada")
-parser.add_argument("--date", dest="acquisition_date", default="no informada")
-parser.add_argument("--output", type=Path, default=Path("component2_output.json"))
-parser.add_argument("--reference-image", type=Path, action="append", default=[], help="Referencia sintética MedDiffusion; se puede repetir")
+parser.add_argument("--output-dir", type=Path, default=Path("generated_references"))
+parser.add_argument("--device", choices=["auto", "cuda", "cpu"], default="auto")
+parser.add_argument("--steps", type=int, default=20)
+parser.add_argument("--seed", type=int, default=20260718)
 args = parser.parse_args()
 
 c1_output = json.loads(args.c1_output.read_text(encoding="utf-8"))
-mime_type = mimetypes.guess_type(args.image.name)[0] or "image/png"
-result = RadiologyAssistant().analyze(
-    c1_output,
-    args.image.read_bytes(),
-    mime_type,
-    args.modality,
-    args.view,
-    args.acquisition_date,
-    [(path.read_bytes(), mimetypes.guess_type(path.name)[0] or "image/png") for path in args.reference_image],
+generated = LocalDiffusionReferenceGenerator().generate(
+    c1_output, device=args.device, steps=args.steps, seed=args.seed
 )
-args.output.parent.mkdir(parents=True, exist_ok=True)
-args.output.write_text(json.dumps(result, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+args.output_dir.mkdir(parents=True, exist_ok=True)
+image_path = args.output_dir / f"local_reference_{generated.gt_id}.png"
+image_path.write_bytes(generated.data)
+result = {
+    "status": "reference_generated",
+    "mode": "prospective_visual_guidance",
+    "reference_image_path": str(image_path),
+    "gt_id": generated.gt_id,
+    "model": generated.model,
+    "prompt": generated.prompt,
+    "limitation": generated.limitation,
+}
+(args.output_dir / "component2_output.json").write_text(
+    json.dumps(result, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+)
 print(json.dumps(result, ensure_ascii=False, indent=2))

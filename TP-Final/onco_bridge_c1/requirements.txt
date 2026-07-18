@@ -2,7 +2,7 @@
 optuna>=4.0,<5.0
 # Embeddings multilingües para el RAG semántico híbrido.
 sentence-transformers>=3.0
-# UI local y asistente generativo basado en Gemini.
+# UI local y asistente generativo de texto basado en Gemini.
 streamlit>=1.40
 google-genai>=1.0
 python-dotenv>=1.0
@@ -13,3 +13,6 @@ numpy>=1.26
 diffusers>=0.31
 accelerate>=1.0
 safetensors>=0.4
+# Backend de Stable Diffusion. Para aprovechar CUDA, instalar la build CUDA de
+# PyTorch indicada en el README dentro del mismo entorno virtual.
+torch>=2.4

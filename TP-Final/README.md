@@ -3,7 +3,7 @@
 Sistema educativo de apoyo a la decisión oncológica desarrollado para el TP Final de **IA Generativa para Datos Biomédicos**. Conecta dos perfiles:
 
 - **Componente 1 — oncólogo/clínico:** recupera ground truths relevantes mediante RAG híbrido, rankea hipótesis, estima si hace falta diagnóstico por imágenes y prepara instrucciones para radiología.
-- **Componente 2 — radiólogo:** recibe el output de C1 y un estudio de CT/MRI, lo contrasta con los patrones esperados y devuelve regiones de interés descriptivas, hallazgos y una recomendación estructurada.
+- **Componente 2 — radiólogo:** transforma la hipótesis de C1 en una **referencia visual sintética** de lo que se espera encontrar en CT/MRI, para orientar la lectura. De forma experimental, también puede recibir un estudio renderizado y devolver regiones de interés descriptivas.
 
 Es un prototipo académico sobre datos sintéticos. **No está validado para uso clínico real ni reemplaza el juicio profesional.**
 
@@ -30,12 +30,11 @@ flowchart LR
     D --> E["Output C1: hipótesis, derivación y prompts"]
     E --> F["Asistente conversacional Gemini"]
     E --> H["Componente 2"]
-    I["Estudio CT/MRI del paciente"] --> H
-    J["Referencia sintética Gemini Image o 3D MedDiffusion"] --> H
-    H --> K["ROI descriptivas, hallazgos y recomendación"]
+    H --> J["Referencia visual sintética local (PNG)"]
+    J --> K["Guía visual sintética para el radiólogo"]
 ```
 
-Los embeddings de los 30 GT se calculan localmente una vez y quedan en `onco_bridge_c1/.cache/`. Gemini solo se usa para el resumen/chat y para interpretar imágenes en C2, siempre que el usuario lo habilite.
+Los embeddings de los 30 GT se calculan localmente una vez y quedan en `onco_bridge_c1/.cache/`. Gemini solo se usa, de forma opcional, para el resumen y chat de texto de C1. C2 se ejecuta completamente local con Stable Diffusion.
 
 ## Estructura del entregable
 
@@ -56,18 +55,18 @@ TP-Final/
 │   ├── run_component2.py
 │   ├── run_end_to_end.py
 │   ├── prepare_meddiffusion_references.py
-│   ├── generate_reference_image.py
 │   ├── generate_local_reference.py
 │   ├── split_dataset.py
 │   ├── optimize_hyperparameters.py
 │   ├── evaluate.py
-│   ├── evaluate_component2.py
 │   ├── data_splits/
 │   ├── artifacts/
 │   ├── notebooks/                         # Notebook Colab para 3D MedDiffusion
 │   └── onco_bridge/
 └── legacy/                               # archivo local anterior, excluido de Git
 ```
+
+Los archivos producidos durante una corrida (`artifacts/`, `.cache/` y `generated_references/`) no son parte del código fuente: se regeneran con los comandos de esta guía y están excluidos de Git cuando corresponde.
 
 ## Guía de ejecución desde cero (PowerShell)
 
@@ -84,6 +83,8 @@ python -m pip install --upgrade pip
 pip install -r requirements.txt
 ```
 
+Para usar la generación local con GPU NVIDIA, PyTorch debe detectar CUDA en **ese mismo** entorno. Si `python -c "import torch; print(torch.cuda.is_available())"` devuelve `False`, instalar la build CUDA indicada en la [página oficial de PyTorch](https://pytorch.org/get-started/locally/) antes de ejecutar C2.
+
 La primera ejecución semántica descarga `BAAI/bge-m3` desde Hugging Face y puede tardar. Luego los embeddings de los GT se reutilizan desde caché.
 
 ### 2. Configurar Gemini
@@ -93,7 +94,7 @@ Copy-Item .env.example .env
 notepad .env
 ```
 
-Completar `GEMINI_API_KEY` y, si corresponde, cambiar los nombres de modelo por modelos disponibles para esa clave. C1 puede funcionar sin Gemini; C2 y el chat generativo sí requieren la API.
+Completar `GEMINI_API_KEY` y, si corresponde, cambiar el modelo de texto. C1 y C2 pueden funcionar sin Gemini; la API solo habilita el resumen y chat generativo de C1.
 
 Probar la clave:
 
@@ -165,17 +166,7 @@ Los reportes se guardan en `onco_bridge_c1/artifacts/`. El evaluador verifica qu
 
 ### 7. Generar referencias sintéticas para C2
 
-#### Alternativa integrada: Gemini Image
-
-Genera una ilustración radiológica sintética desde el prompt de la hipótesis principal de C1. Reutiliza `GEMINI_API_KEY`, pero requiere que la clave tenga acceso al modelo configurado en `GEMINI_IMAGE_MODEL`.
-
-```powershell
-python onco_bridge_c1\generate_reference_image.py onco_bridge_c1\artifacts\c1_case_001.json --output-dir generated_references\case_001
-```
-
-Genera una imagen y `metadata.json`. Puede cargarse en Streamlit desde Componente 2 o pasarse mediante `--reference-image`. Es una referencia educativa sintetizada por un modelo generalista: no es un estudio real, no está validada clínicamente y no debe utilizarse como evidencia diagnóstica.
-
-#### Alternativa sin API: Stable Diffusion local
+#### Stable Diffusion local
 
 Para un proof of concept sin cuota de Gemini, el proyecto incluye un generador local basado en el modelo público `stable-diffusion-v1-5/stable-diffusion-v1-5` y la biblioteca Diffusers. En la primera ejecución descarga los pesos; luego los reutiliza desde caché. Requiere GPU CUDA; el script rechaza CPU porque sería demasiado lento. En GPUs de menos de 8 GB activa automáticamente CPU offload para reducir VRAM, a costa de mayor tiempo de generación.
 
@@ -183,7 +174,7 @@ Para un proof of concept sin cuota de Gemini, el proyecto incluye un generador l
 python onco_bridge_c1\generate_local_reference.py onco_bridge_c1\artifacts\c1_case_001.json --device cuda --output-dir generated_references\case_001_local
 ```
 
-También está disponible como botón **“Generar referencia local (GPU)”** dentro de Componente 2 en Streamlit. Produce un PNG y `metadata_local.json`. El modelo es generalista y el resultado es solo una referencia visual sintética educativa, no una imagen médica validada.
+También está disponible como botón **“Generar referencia local (GPU)”** dentro de Componente 2 en Streamlit. Produce un PNG y `metadata_local.json`. El modelo es generalista y el resultado es solo una referencia visual sintética educativa, no una imagen médica validada. Es la alternativa elegida para el entregable: funciona localmente con CUDA y evita el requisito de 40 GB de VRAM de 3D MedDiffusion.
 
 #### Opción GPU externa: 3D MedDiffusion en Google Colab
 
@@ -201,22 +192,21 @@ El archivo `manifest.json` es la entrada reproducible para elegir anatomía y do
 
 ### 8. Correr el Componente 2
 
-Primero se puede generar una imagen **no médica** para comprobar que el contrato completo funciona:
+El objetivo del componente es generar la guía visual prospectiva para el radiólogo. Con el JSON de C1 ya generado, el siguiente comando produce un PNG y un JSON de metadatos en `generated_references\case_001_local\`:
 
 ```powershell
-python onco_bridge_c1\create_demo_assets.py
-python onco_bridge_c1\run_component2.py onco_bridge_c1\artifacts\c1_case_001.json onco_bridge_c1\demo_assets\non_medical_test_image.png --modality abdominal_CT --view "prueba técnica" --output onco_bridge_c1\artifacts\c2_demo.json
+python onco_bridge_c1\run_component2.py onco_bridge_c1\artifacts\c1_case_001.json --device cuda --output-dir generated_references\case_001_local
 ```
 
-El output esperado es un JSON visible con clasificación `imagen_no_evaluable`: esto valida la integración, no la capacidad radiológica. Para una prueba significativa, reemplazar la imagen por una captura PNG/JPG/WEBP de CT/MRI y agregar opcionalmente una o más referencias con `--reference-image ruta\referencia.png`. En Streamlit también se puede generar una referencia Gemini Image directamente desde C2. C2 separa explícitamente el estudio real de las referencias. Las ROI actuales son descriptivas; no constituyen una máscara pixel a pixel validada.
+La imagen `local_reference_<GT_ID>.png` es el output visual que acompaña al JSON de C1. No representa al paciente ni se interpreta como evidencia clínica.
 
 ### 9. Correr el flujo end-to-end
 
 ```powershell
-python onco_bridge_c1\run_end_to_end.py dataset_clinical_only\dataset\clinical_cases\case_001\input.json onco_bridge_c1\demo_assets\non_medical_test_image.png --modality abdominal_CT --view "prueba técnica" --output onco_bridge_c1\artifacts\end_to_end_demo.json
+python onco_bridge_c1\run_end_to_end.py dataset_clinical_only\dataset\clinical_cases\case_001\input.json --reference-device cuda --output onco_bridge_c1\artifacts\end_to_end_case_001.json
 ```
 
-Este único comando encadena C1 y C2 y produce un resultado visible. Requiere `GEMINI_API_KEY` por el análisis visual de C2. Para el caso real se reemplaza la imagen de prueba y, si se desea, se agrega `--reference-image`.
+Este único comando encadena C1 y C2, guarda el JSON final y crea `onco_bridge_c1\artifacts\end_to_end_case_001_radiology_reference.png`. La ruta del PNG queda también dentro de `generated_radiology_reference.image_path` del JSON. No requiere Gemini: usa Stable Diffusion local y CUDA.
 
 ### 10. Abrir la interfaz
 
@@ -224,17 +214,7 @@ Este único comando encadena C1 y C2 y produce un resultado visible. Requiere `G
 streamlit run onco_bridge_c1\app.py
 ```
 
-En la barra lateral se elige Componente 1 o Componente 2. C2 muestra los prompts de referencia, permite adjuntar las imágenes sintéticas y exige confirmación antes de enviar datos a Gemini.
-
-### 11. Evaluar segmentación de C2
-
-Cuando se disponga de imágenes y máscaras binarias anotadas, copiar `onco_bridge_c1/component2_eval_manifest.example.json`, completar las rutas y ejecutar:
-
-```powershell
-python onco_bridge_c1\evaluate_component2.py C:\ruta\component2_eval_manifest.json --report onco_bridge_c1\artifacts\component2_evaluation.json
-```
-
-Produce IoU, sensibilidad y especificidad por píxel. El dataset entregado por la cátedra no permite calcular estas métricas porque no incluye imágenes ni máscaras.
+En la barra lateral se elige Componente 1 o Componente 2. C2 muestra el contexto de C1 y genera la referencia localmente; no carga ni envía estudios de imágenes.
 
 ## Dataset y resultados actuales
 
@@ -253,11 +233,12 @@ Antes de la entrega se debe ejecutar la optimización con BGE-M3 y reemplazar es
 
 - Los casos son sintéticos, no fueron validados prospectivamente ni revisados como cohorte por especialistas certificados.
 - C1 no es un modelo diagnóstico y sus probabilidades son scores calibrables, no riesgo clínico real.
+- La precisión de match de GT puede ser baja porque el problema usa solo **30 ground truths y 110 casos sintéticos**; varias entidades comparten síntomas, estudios y diferenciales. El RAG recupera similitud léxica/semántica y el optimizador ajusta pesos, pero **no entrena un modelo predictivo supervisado** ni puede aprender patrones clínicos nuevos a partir de una cohorte tan pequeña. Para mejorar de forma sustentable se requeriría una base mucho mayor, curada y balanceada, con etiquetas revisadas por especialistas, particiones externas por centro y el entrenamiento/validación de un modelo de machine learning supervisado, además de calibración y análisis de sesgos. La optimización de hiperparámetros actual solo elige pesos de scoring; no sustituye ese entrenamiento.
 - Los GT contienen instrucciones anatómicas prototípicas; la lateralidad debe ser revisada contra el caso antes de usar la guía.
 - Hay una inconsistencia nominal entre los ejemplos de la consigna (`GT-LUNG-*`, `GT-HCC-*`, `GT-HAMARTOMA-*`) y los archivos realmente entregados (`GT-PULM-*`, `GT-HIGADO-*` y otros diferenciales). El sistema toma como fuente de verdad los IDs del dataset.
-- C2 usa Gemini Vision sobre imágenes renderizadas, no procesa volúmenes DICOM/NIfTI completos.
-- Las ROI de C2 son descriptivas; una evaluación IoU real exige un segmentador, máscaras y un dataset radiológico anotado.
-- Gemini Image y 3D MedDiffusion producen referencias sintéticas educativas; ninguna sustituye imágenes reales ni está validada para diagnóstico. Los pesos públicos de 3D MedDiffusion controlan anatomía/modalidad, no lesiones específicas.
+- No se utilizó 3D MedDiffusion en la aplicación local porque su repositorio oficial informa un mínimo de **40 GB de VRAM** para inferencia; ese hardware no está disponible en el entorno del proyecto. Se documentó una alternativa en Colab, pero para el entregable se eligió Stable Diffusion local, que puede ejecutarse con CUDA y genera la referencia rápidamente en una GPU de consumo. Sigue siendo un modelo generalista, no un generador médico validado.
+- C2 fue redefinido como **guía visual prospectiva**: en lugar de detectar hallazgos sobre una imagen médica real, genera una imagen sintética de lo que se espera hallar según C1 y la entrega al radiólogo como orientación. No debe confundirse con una imagen del paciente ni con una predicción clínica.
+- La futura mejora prioritaria es incorporar estudios reales anonimizados y anotados, y entrenar/validar un detector de objetos o un modelo de segmentación para localizar la patología en la imagen real. Recién entonces serían pertinentes métricas como IoU, sensibilidad y especificidad por píxel.
 - Para producción harían falta anonimización DICOM, cifrado, control de acceso, auditoría, versionado de modelos, monitoreo de drift, validación clínica y un procedimiento de contingencia.
 
 Trabajo futuro prioritario: adaptar C2 a DICOM/NIfTI, incorporar un segmentador médico validado, construir un dataset multimodal con máscaras de especialistas, calibrar probabilidades y evaluar sesgos por edad, sexo y centro de adquisición.
