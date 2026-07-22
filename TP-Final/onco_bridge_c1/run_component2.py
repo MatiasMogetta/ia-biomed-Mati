@@ -12,7 +12,7 @@ parser = argparse.ArgumentParser(description="OncoBridge AI - Componente 2 (refe
 parser.add_argument("c1_output", type=Path, help="JSON producido por el Componente 1")
 parser.add_argument("--output-dir", type=Path, default=Path("generated_references"))
 parser.add_argument("--device", choices=["auto", "cuda", "cpu"], default="auto")
-parser.add_argument("--steps", type=int, default=60)
+parser.add_argument("--steps", type=int, default=30)
 parser.add_argument("--seed", type=int, default=20260718)
 args = parser.parse_args()
 

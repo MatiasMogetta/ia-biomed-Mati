@@ -2,7 +2,9 @@
 .venv/
 __pycache__/
 *.py[cod]
-onco_bridge_c1/.cache/
+# Caché semántico: se versiona solo el embedding precalculado del dataset vigente.
+onco_bridge_c1/.cache/*
+!onco_bridge_c1/.cache/gt_embeddings_8b0b40f7b7672f56.npy
 onco_bridge_c1/artifacts/*
 !onco_bridge_c1/artifacts/.gitkeep
 onco_bridge_c1/demo_assets/
