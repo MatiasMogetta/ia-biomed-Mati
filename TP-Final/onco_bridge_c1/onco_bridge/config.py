@@ -41,3 +41,17 @@ def load_pipeline_config(path: str | Path | None) -> dict[str, Any]:
             "Ejecutá optimize_hyperparameters.py para regenerarla."
         )
     return payload.get("best_config", payload)
+
+
+def ensure_semantic_ready(pipeline: Any, operation: str = "La ejecución") -> None:
+    """Impide presentar un fallback léxico como si fuera el RAG híbrido configurado."""
+    if getattr(pipeline, "semantic_weight", 0) <= 0:
+        return
+    retriever = getattr(pipeline, "semantic_retriever", None)
+    if retriever is not None and retriever.available:
+        return
+    reason = getattr(retriever, "reason_unavailable", "modelo semántico no disponible")
+    raise RuntimeError(
+        f"{operation} requiere el RAG híbrido BGE-M3 y no permite fallback léxico. "
+        f"Detalle: {reason}"
+    )

@@ -1,6 +1,8 @@
 """Evaluación reproducible de los 110 casos clínicos."""
 import json
 import argparse
+import hashlib
+from datetime import datetime, timezone
 from pathlib import Path
 
 from onco_bridge import ClinicalPipeline
@@ -9,6 +11,8 @@ from onco_bridge.config import (
     DATASET_ROOT,
     DEFAULT_CONFIG_PATH,
     GT_DIRECTORY,
+    dataset_fingerprint,
+    ensure_semantic_ready,
     load_pipeline_config,
 )
 
@@ -27,10 +31,16 @@ def main():
     args = parser.parse_args()
     config = load_pipeline_config(args.config)
     pipeline = ClinicalPipeline(GT_DIRECTORY, **config)
+    ensure_semantic_ready(pipeline, "La evaluación")
     gt_by_id = {entry["gt_id"]: entry for entry in pipeline.entries}
     rows = []
     if args.manifest:
         manifest = json.loads(args.manifest.read_text(encoding="utf-8"))
+        current_fingerprint = dataset_fingerprint()
+        if manifest.get("dataset_fingerprint") != current_fingerprint:
+            raise ValueError("El manifiesto no corresponde al dataset vigente. Regeneralo con split_dataset.py.")
+        if manifest.get("split") not in {"train", "test"}:
+            raise ValueError("El manifiesto debe declarar split='train' o split='test'.")
         case_dirs = [DATASET / "clinical_cases" / case_id for case_id in manifest["case_ids"]]
         split = manifest["split"]
     else:
@@ -55,6 +65,8 @@ def main():
                      "prompt_correct": bool(primary_correct and actual_prompt == expected_prompt),
                      "imaging_prediction": actual["recommendation"] == "DERIVAR_A_IMAGEN"})
     n = len(rows)
+    if not n:
+        raise ValueError("No se encontraron casos para evaluar.")
     gt_hits = sum(r["gt_hit"] for r in rows)
     decision_hits = sum(r["actual"]["recommendation"] == r["expected"]["specialist_decision"] for r in rows)
     tp = sum(r["imaging_prediction"] and r["expected"]["imaging_needed_ground_truth"] for r in rows)
@@ -66,13 +78,21 @@ def main():
     urgency_hits = sum(r["actual"]["urgency"] == r["expected"]["urgency_ground_truth"] for r in rows)
     conclusive_hits = sum(r["actual"]["conclusive"] == r["expected"]["conclusive_ground_truth"] for r in rows)
     prompt_hits = sum(r["prompt_correct"] for r in rows)
-    report = {"split": split, "cases": n, "gt_match_accuracy": safe_div(gt_hits, n), "referral_accuracy": safe_div(decision_hits, n),
+    config_hash = hashlib.sha256(args.config.read_bytes()).hexdigest()[:16] if args.config and args.config.exists() else None
+    prompt_accuracy = safe_div(prompt_hits, n)
+    report = {"split": split, "cases": n, "dataset_fingerprint": dataset_fingerprint(),
+              "config_file": args.config.name if args.config else None, "config_sha256": config_hash,
+              "semantic_model": pipeline.semantic_retriever.model_name if pipeline.semantic_retriever else None,
+              "semantic_retrieval_active": bool(pipeline.semantic_retriever and pipeline.semantic_retriever.available),
+              "generated_at_utc": datetime.now(timezone.utc).isoformat(),
+              "gt_match_accuracy": safe_div(gt_hits, n), "referral_accuracy": safe_div(decision_hits, n),
               "sensitivity": safe_div(tp, tp + fn), "specificity": safe_div(tn, tn + fp), "brier_score": round(brier, 4),
               "gt_probability_brier_score": round(gt_brier, 4), "urgency_accuracy": safe_div(urgency_hits, n),
-              "conclusive_accuracy": safe_div(conclusive_hits, n), "meddiffusion_prompt_accuracy": safe_div(prompt_hits, n),
+              "conclusive_accuracy": safe_div(conclusive_hits, n), "radiology_prompt_accuracy": prompt_accuracy,
               "mean_estimated_tokens": round(sum(r["actual"]["token_usage"]["total_tokens"] for r in rows) / n, 1),
               "confusion_matrix": {"TP": tp, "FP": fp, "FN": fn, "TN": tn},
-              "note": "Métricas sobre datos sintéticos educativos; no reflejan desempeño clínico real."}
+              "note": "Métricas sobre datos sintéticos educativos; no reflejan desempeño clínico real.",
+              "protocol": "Hiperparámetros congelados tras optimización exclusiva en train; test reservado para evaluación final."}
     OUTPUT_DIR.mkdir(exist_ok=True)
     report_path = args.report or OUTPUT_DIR / f"evaluation_report_{split}.json"
     report_path.write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")

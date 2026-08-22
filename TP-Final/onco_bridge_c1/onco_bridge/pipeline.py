@@ -72,7 +72,7 @@ class Candidate:
 
 
 class ClinicalPipeline:
-    """RAG léxico con una segunda etapa de scoring clínico determinístico."""
+    """RAG híbrido léxico-semántico con scoring clínico determinístico."""
 
     def __init__(
         self,

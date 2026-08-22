@@ -10,10 +10,15 @@ import csv
 import json
 from pathlib import Path
 
-import optuna
-
 from onco_bridge import ClinicalPipeline
-from onco_bridge.config import APP_ROOT, ARTIFACTS_DIRECTORY, DATASET_ROOT, GT_DIRECTORY, dataset_fingerprint
+from onco_bridge.config import (
+    APP_ROOT,
+    ARTIFACTS_DIRECTORY,
+    DATASET_ROOT,
+    GT_DIRECTORY,
+    dataset_fingerprint,
+    ensure_semantic_ready,
+)
 
 
 DATASET = DATASET_ROOT
@@ -24,6 +29,8 @@ def load_cases(manifest_path: Path) -> list[tuple[dict, dict]]:
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     if manifest.get("split") != "train":
         raise ValueError("Por seguridad, el optimizador acepta únicamente un manifiesto con split='train'.")
+    if manifest.get("dataset_fingerprint") != dataset_fingerprint():
+        raise ValueError("El manifiesto no corresponde al dataset vigente. Regeneralo con split_dataset.py.")
     cases = []
     for case_id in manifest["case_ids"]:
         case_dir = DATASET / "clinical_cases" / case_id
@@ -36,6 +43,7 @@ def load_cases(manifest_path: Path) -> list[tuple[dict, dict]]:
 
 def metrics(config: dict, cases: list[tuple[dict, dict]]) -> dict:
     pipeline = ClinicalPipeline(GT_DIRECTORY, **config)
+    ensure_semantic_ready(pipeline, "La optimización")
     gt_hits = decisions = tp = fp = fn = tn = 0
     for patient, expected in cases:
         output = pipeline.analyze(patient)
@@ -68,6 +76,10 @@ def main() -> None:
     parser.add_argument("--min-sensitivity", type=float, default=0.80)
     parser.add_argument("--manifest", type=Path, default=APP_ROOT / "data_splits" / "train_cases.json")
     args = parser.parse_args()
+    try:
+        import optuna
+    except ImportError as error:
+        raise RuntimeError("Falta Optuna. Ejecutá: pip install -r requirements.txt") from error
     cases = load_cases(args.manifest)
     OUTPUT.mkdir(exist_ok=True)
     optuna.logging.set_verbosity(optuna.logging.WARNING)

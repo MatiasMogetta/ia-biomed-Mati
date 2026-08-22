@@ -1,0 +1,28 @@
+{
+  "split": "test",
+  "cases": 33,
+  "dataset_fingerprint": "e8643bb5519243a1",
+  "config_file": "best_hyperparameters.json",
+  "config_sha256": "913aafc755fa2ec8",
+  "semantic_model": "BAAI/bge-m3",
+  "semantic_retrieval_active": true,
+  "generated_at_utc": "2026-08-21T03:23:29.194393+00:00",
+  "gt_match_accuracy": 0.5152,
+  "referral_accuracy": 0.6061,
+  "sensitivity": 0.8333,
+  "specificity": 0.5556,
+  "brier_score": 0.2823,
+  "gt_probability_brier_score": 0.2307,
+  "urgency_accuracy": 0.5758,
+  "conclusive_accuracy": 0.9091,
+  "radiology_prompt_accuracy": 0.5152,
+  "mean_estimated_tokens": 523.1,
+  "confusion_matrix": {
+    "TP": 20,
+    "FP": 4,
+    "FN": 4,
+    "TN": 5
+  },
+  "note": "Métricas sobre datos sintéticos educativos; no reflejan desempeño clínico real.",
+  "protocol": "Hiperparámetros congelados tras optimización exclusiva en train; test reservado para evaluación final."
+}

@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 
 from onco_bridge import ClinicalPipeline
-from onco_bridge.config import DEFAULT_CONFIG_PATH, GT_DIRECTORY, load_pipeline_config
+from onco_bridge.config import DEFAULT_CONFIG_PATH, GT_DIRECTORY, ensure_semantic_ready, load_pipeline_config
 
 parser = argparse.ArgumentParser(description="OncoBridge AI - Componente 1")
 parser.add_argument("input", type=Path, help="Ruta a input.json del paciente")
@@ -15,10 +15,11 @@ args = parser.parse_args()
 
 patient = json.loads(args.input.read_text(encoding="utf-8"))
 config = load_pipeline_config(args.config)
-result = ClinicalPipeline(GT_DIRECTORY, top_k=args.top_k, **config).analyze(patient)
+pipeline = ClinicalPipeline(GT_DIRECTORY, top_k=args.top_k, **config)
+ensure_semantic_ready(pipeline, "El Componente 1")
+result = pipeline.analyze(patient)
 serialized = json.dumps(result, ensure_ascii=False, indent=2)
 if args.output:
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(serialized + "\n", encoding="utf-8")
-else:
-    print(serialized)
+print(serialized)

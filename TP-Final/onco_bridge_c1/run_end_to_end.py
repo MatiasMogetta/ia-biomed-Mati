@@ -6,7 +6,7 @@ import json
 from pathlib import Path
 
 from onco_bridge import ClinicalPipeline
-from onco_bridge.config import DEFAULT_CONFIG_PATH, GT_DIRECTORY, load_pipeline_config
+from onco_bridge.config import DEFAULT_CONFIG_PATH, GT_DIRECTORY, ensure_semantic_ready, load_pipeline_config
 from onco_bridge.local_reference_generator import LocalDiffusionReferenceGenerator
 
 
@@ -22,23 +22,34 @@ args = parser.parse_args()
 
 config = load_pipeline_config(args.config)
 patient = json.loads(args.input.read_text(encoding="utf-8"))
-c1_output = ClinicalPipeline(GT_DIRECTORY, **config).analyze(patient)
+pipeline = ClinicalPipeline(GT_DIRECTORY, **config)
+ensure_semantic_ready(pipeline, "El flujo end-to-end")
+c1_output = pipeline.analyze(patient)
 args.output.parent.mkdir(parents=True, exist_ok=True)
-generated = LocalDiffusionReferenceGenerator().generate(
-    c1_output, device=args.reference_device, steps=args.reference_steps, seed=args.reference_seed
-)
-reference_output = args.reference_output or args.output.parent / f"{args.output.stem}_radiology_reference.png"
-reference_output.parent.mkdir(parents=True, exist_ok=True)
-reference_output.write_bytes(generated.data)
-generated_reference = {
-    "image_path": str(reference_output), "mime_type": generated.mime_type, "model": generated.model,
-    "gt_id": generated.gt_id, "prompt": generated.prompt, "limitation": generated.limitation,
-}
-c2_output = {
-    "status": "reference_generated", "mode": "prospective_visual_guidance",
-    "message": "Se generó una referencia visual sintética basada en la hipótesis principal de C1.",
-    "reference_image_path": generated_reference["image_path"], "limitation": generated_reference["limitation"],
-}
+generated_reference = None
+if c1_output.get("recommendation") == "DERIVAR_A_IMAGEN" and c1_output.get("matched_ground_truths"):
+    generated = LocalDiffusionReferenceGenerator().generate(
+        c1_output, device=args.reference_device, steps=args.reference_steps, seed=args.reference_seed
+    )
+    reference_output = args.reference_output or args.output.parent / f"{args.output.stem}_radiology_reference.png"
+    reference_output.parent.mkdir(parents=True, exist_ok=True)
+    reference_output.write_bytes(generated.data)
+    generated_reference = {
+        "image_path": str(reference_output), "mime_type": generated.mime_type, "model": generated.model,
+        "gt_id": generated.gt_id, "prompt": generated.prompt, "limitation": generated.limitation,
+    }
+    c2_output = {
+        "status": "reference_generated", "mode": "prospective_visual_guidance",
+        "message": "Se generó una referencia visual sintética basada en la hipótesis principal de C1.",
+        "reference_image_path": generated_reference["image_path"], "limitation": generated_reference["limitation"],
+    }
+else:
+    c2_output = {
+        "status": "not_required", "mode": "prospective_visual_guidance",
+        "message": "C2 no generó una referencia porque C1 no recomendó derivación a imágenes.",
+        "reference_image_path": None,
+        "limitation": "La ausencia de una referencia sintética no reemplaza la evaluación clínica profesional.",
+    }
 
 result = {
     "component_1_output": c1_output,

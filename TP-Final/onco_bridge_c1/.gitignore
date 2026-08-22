@@ -2,8 +2,10 @@
 __pycache__/
 *.py[cod]
 evaluation_report*.json
+!artifacts/evaluation_report_test.json
 sample_output*.json
 component2_output.json
 end_to_end_output.json
 optimization_trials.csv
 plot_metrics.py
+C:\Users\matia\Desktop\IA generativa\ia-biomed-Mati\entrega1\.env
