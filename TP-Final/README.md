@@ -44,6 +44,104 @@ flowchart LR
     J -->|No| M["C2: not_required"]
 ```
 
+### Arquitectura detallada del Componente 1
+
+El Componente 1 es un pipeline RAG híbrido y explicable. Recupera hipótesis desde una base de 30 Ground Truth (GT), las contrasta con evidencia clínica estructurada del caso y emite una recomendación de derivación a imágenes. No entrena un modelo diagnóstico ni produce un diagnóstico autónomo.
+
+#### 1. Datos, split y optimización
+
+Los 110 casos clínicos sintéticos se dividen de forma estratificada y reproducible en 77 casos de **train** (70 %) y 33 de **test** (30 %). Los casos de train se usan para seleccionar los hiperparámetros; el test queda reservado y se evalúa una única vez después de congelar la configuración elegida.
+
+`optimize_hyperparameters.py` ejecuta 150 trials de Optuna sobre train. En cada trial ajusta los pesos léxico/semántico del RAG, los seis pesos de evidencia clínica y los umbrales de decisión. La función objetivo es:
+
+```text
+score = (sensibilidad + especificidad + exactitud_de_GT) / 3
+```
+
+Si la sensibilidad es menor a 0,80, el score recibe una penalización. La sensibilidad prioriza no omitir casos que requerían imágenes; la especificidad limita derivaciones innecesarias; y la exactitud de GT mide si la primera hipótesis coincide con una entidad esperada. La configuración ganadora se guarda en `onco_bridge_c1/artifacts/best_hyperparameters.json` junto con la huella del dataset, para impedir reutilizarla si cambian los GT.
+
+#### 2. Preparación de los 30 Ground Truth
+
+Cada GT se representa de dos formas:
+
+- **Semántica:** BGE-M3 genera un embedding normalizado para el documento clínico compacto del GT. Los embeddings de los 30 GT se guardan en caché para no recalcularlos en cada ejecución.
+- **Léxica:** el contenido se normaliza (minúsculas, sin tildes ni puntuación, sin stopwords y con un diccionario acotado de sinónimos) y se convierte en un conjunto de términos. Esta representación se construye al iniciar el pipeline; no se persiste como archivo de caché.
+
+#### 3. Camino de un caso clínico nuevo: recuperación híbrida
+
+Al cargar un caso, C1 reúne demografía, síntomas actuales, antecedentes recientes y laboratorios. A ese texto le aplica la misma normalización y le calcula un embedding BGE-M3. Luego compara el caso contra los 30 GT con dos señales:
+
+- **Similitud semántica:** similitud coseno entre el embedding normalizado del caso y el embedding de cada GT.
+- **Score léxico:** proporción de términos normalizados del caso que también aparecen en el GT, más un pequeño refuerzo cuando el caso contiene términos asociados al órgano del GT.
+
+La configuración optimizada vigente asigna un peso semántico de **0,329877** y un peso léxico de **0,670123**:
+
+```text
+score_hibrido = 0,670123 × score_lexico + 0,329877 × similitud_semantica
+```
+
+Los 30 GT se ordenan por `score_hibrido` y se conservan los **5 candidatos** con mayor similitud. Esta etapa solo recupera candidatos plausibles; todavía no define las hipótesis finales ni la derivación.
+
+#### 4. Validación clínica y selección de hasta 3 hipótesis
+
+Para cada uno de los 5 candidatos recuperados, C1 vuelve a comparar el caso normalizado con la evidencia específica del GT. Calcula seis señales:
+
+| Evidencia | Peso optimizado | Cálculo |
+|---|---:|---|
+| RAG | 0,229457 | Score de recuperación híbrida, reescalado a un máximo de 1. |
+| Síntomas | 0,232214 | Solapamiento entre términos del caso y síntomas esperados. |
+| Hallazgos clínicos | 0,171297 | Solapamiento con hallazgos clínicos esperados. |
+| Factores de riesgo | 0,061177 | Solapamiento con riesgos y antecedentes predisponentes. |
+| Antecedentes | 0,079676 | Solapamiento con antecedentes o red flags de imágenes previas. |
+| Biomarcadores | 0,226181 | Proporción de reglas de laboratorio del GT que cumple el paciente. |
+
+El puntaje clínico es:
+
+```text
+score_clinico =
+  0,229457 × RAG +
+  0,232214 × sintomas +
+  0,171297 × hallazgos +
+  0,061177 × riesgo +
+  0,079676 × antecedentes +
+  0,226181 × biomarcadores
+```
+
+El score clínico se combina con la probabilidad base definida en cada GT. La probabilidad base es un prior heurístico del dataset sintético: no equivale a prevalencia ni a riesgo clínico poblacional.
+
+```text
+probabilidad_final =
+  0,749423 × score_clinico +
+  0,250577 × probabilidad_base_GT
+```
+
+Los candidatos se ordenan por `probabilidad_final`. C1 considera como máximo los tres primeros y solo devuelve aquellos que cumplen ambas condiciones: una probabilidad de al menos **0,227567** y evidencia explícita encontrada en el caso. Por eso el output puede contener de cero a tres hipótesis. Si ninguna supera los criterios, devuelve `SIN_ELEMENTOS_PARA_EVALUAR`.
+
+#### 5. Urgencia y derivación a imágenes
+
+La hipótesis principal determina inicialmente la urgencia: toma el campo `urgency_level` del GT (`alta`, `media` o `baja`), salvo que la categoría principal sea benigna, caso en el que la urgencia inicial es `ninguna`. Para valorar la necesidad de imágenes, C1 transforma la urgencia en un peso:
+
+```text
+alta = 1,0
+media = 0,6
+baja = 0,3
+```
+
+Y calcula la mayor probabilidad ponderada entre las hipótesis seleccionadas:
+
+```text
+probabilidad_imagenes = max(probabilidad_final_hipotesis × peso_urgencia)
+```
+
+Con la configuración vigente:
+
+- Si `probabilidad_imagenes >= 0,369822`, recomienda `DERIVAR_A_IMAGEN`.
+- Si la hipótesis principal es **benigna** y `probabilidad_imagenes < 0,321756`, recomienda `NO_DERIVAR`.
+- En los demás casos, recomienda `SEGUIMIENTO_CLINICO` y asigna urgencia baja.
+- Si no hay hipótesis válidas, devuelve `SIN_ELEMENTOS_PARA_EVALUAR` y urgencia ninguna.
+
+Por lo tanto, el umbral bajo no implica `NO_DERIVAR` para cualquier caso: esa salida está reservada en el código para una hipótesis principal benigna. Un resultado intermedio, o un caso no benigno bajo el umbral de derivación, continúa como seguimiento clínico.
+
 Los embeddings semánticos de los GT se guardan en `onco_bridge_c1/.cache/`. El repositorio incluye el archivo correspondiente al dataset vigente:
 
 ```text
