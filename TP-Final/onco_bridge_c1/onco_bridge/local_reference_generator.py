@@ -6,6 +6,7 @@ from io import BytesIO
 from typing import Any
 
 DEFAULT_LOCAL_MODEL = "stable-diffusion-v1-5/stable-diffusion-v1-5"
+PROMPT2MEDIMAGE_MODEL = "Nihirc/Prompt2MedImage"
 _PIPELINES: dict[tuple[str, str, bool], Any] = {}
 
 
@@ -133,8 +134,17 @@ class LocalDiffusionReferenceGenerator:
             model=f"local:{self.model_id}",
             gt_id=match["gt_id"],
             prompt=prompt,
-            limitation=(
-                "Referencia sintética educativa generada localmente con Stable Diffusion; es un modelo generalista, "
-                "no una imagen clínica real ni una representación radiológica validada."
-            ),
+            limitation=self._limitation(),
+        )
+
+    def _limitation(self) -> str:
+        if self.model_id == PROMPT2MEDIMAGE_MODEL:
+            return (
+                "Referencia sintética educativa generada localmente con Prompt2MedImage, un modelo de difusión "
+                "ajustado sobre imágenes médicas. No es una imagen clínica real, no representa al paciente y no "
+                "constituye evidencia diagnóstica ni una representación radiológica validada."
+            )
+        return (
+            "Referencia sintética educativa generada localmente con Stable Diffusion; es un modelo generalista, "
+            "no una imagen clínica real ni una representación radiológica validada."
         )
