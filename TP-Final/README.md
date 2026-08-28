@@ -3,7 +3,7 @@
 Prototipo académico de apoyo a la decisión oncológica desarrollado para **IA Generativa para Datos Biomédicos**.
 
 - **Componente 1:** compara una historia clínica con una base de conocimiento de 30 Ground Truth mediante RAG híbrido, prioriza hipótesis y decide si corresponde derivar a imágenes.
-- **Componente 2:** cuando C1 recomienda derivación, genera localmente una referencia visual sintética con Stable Diffusion para orientar al radiólogo sobre el patrón esperado.
+- **Componente 2:** cuando C1 recomienda derivación, genera localmente una referencia visual sintética para orientar al radiólogo sobre el patrón esperado. La versión previa utilizaba Stable Diffusion; la interfaz vigente `app2.py` utiliza **Prompt2MedImage** (`Nihirc/Prompt2MedImage`).
 - **Interfaz:** Streamlit permite seleccionar cualquiera de los 110 casos, revisar sus datos y ejecutar el flujo completo con un solo botón.
 
 El sistema usa datos sintéticos y **no está validado para uso clínico real ni reemplaza el juicio profesional**.
@@ -39,7 +39,7 @@ flowchart LR
     E --> F["Output C1: hipótesis, derivación, urgencia y evidencia"]
     F --> I["Resumen/chat Gemini opcional y grounded"]
     F --> J{"¿Derivar a imágenes?"}
-    J -->|Sí| K["Stable Diffusion local"]
+    J -->|Sí| K["Prompt2MedImage local (app2.py)"]
     K --> L["PNG sintético de guía C2"]
     J -->|No| M["C2: not_required"]
 ```
@@ -150,6 +150,17 @@ gt_embeddings_8b0b40f7b7672f56.npy
 
 Si falta o deja de coincidir con los GT o el modelo, el sistema lo regenera. BGE-M3 igualmente debe estar disponible para calcular el embedding de cada caso nuevo.
 
+### Arquitectura detallada del Componente 2
+
+C2 es una guía visual prospectiva: no analiza una imagen real del paciente ni realiza detección o segmentación. Se activa únicamente cuando C1 devuelve una hipótesis respaldada y la recomendación `DERIVAR_A_IMAGEN`.
+
+1. C1 entrega la hipótesis principal junto con su guía radiológica: modalidad sugerida, región anatómica, zonas prioritarias y prompts positivo/negativo.
+2. La interfaz vigente `app2.py` instancia el generador local con el modelo **Prompt2MedImage** (`Nihirc/Prompt2MedImage`).
+3. El prompt positivo de la hipótesis principal se usa para generar una imagen de referencia sintética; el prompt negativo se muestra al radiólogo como guía de qué no debería observarse en el patrón esperado.
+4. La imagen se presenta en la guía radiológica, junto con la región y las zonas de interés. Si no hay derivación, C2 devuelve `not_required` y no genera una imagen.
+
+La versión anterior de C2 empleaba `stable-diffusion-v1-5`. El cambio en `app2.py` reemplaza ese modelo por Prompt2MedImage para la generación de referencias visuales dentro de la interfaz. La imagen resultante sigue siendo educativa y sintética: no constituye evidencia diagnóstica ni corresponde al estudio real del paciente.
+
 ## Estructura
 
 ```text
@@ -164,7 +175,7 @@ TP-Final/
 │       ├── oncology_ground_truth_base/   # 30 GT
 │       └── clinical_cases/               # 110 casos
 └── onco_bridge_c1/
-    ├── app.py
+    ├── app2.py                         # Interfaz Streamlit vigente con Prompt2MedImage
     ├── run_component1.py
     ├── run_component2.py
     ├── run_end_to_end.py
@@ -202,7 +213,7 @@ Para C2, PyTorch debe detectar una GPU NVIDIA:
 python -c "import torch; print(torch.cuda.is_available())"
 ```
 
-Si devuelve `False`, instalar en el mismo entorno la build CUDA indicada por la documentación oficial de PyTorch. La primera carga de BGE-M3 y Stable Diffusion puede descargar sus pesos; después se reutilizan desde caché.
+Si devuelve `False`, instalar en el mismo entorno la build CUDA indicada por la documentación oficial de PyTorch. La primera carga de BGE-M3 y Prompt2MedImage puede descargar sus pesos; después se reutilizan desde caché.
 
 ### 2. Configurar Gemini — opcional
 
@@ -272,7 +283,7 @@ El comando ejecuta C1 y, cuando corresponde, C2. Guarda un JSON integrado y el P
 ### 8. Abrir la aplicación
 
 ```powershell
-streamlit run onco_bridge_c1\app.py
+streamlit run onco_bridge_c1\app2.py
 ```
 
 La aplicación permite:
@@ -284,6 +295,8 @@ La aplicación permite:
 - ingresar al espacio del oncólogo para consultar el resumen, las hipótesis y el chat fundamentado en C1;
 - ingresar al espacio del radiólogo, limitado a la guía radiológica, los positive/negative prompts, las zonas prioritarias y la referencia sintética;
 - descargar el PNG sintético cuando corresponde.
+
+La versión vigente de esta interfaz usa Prompt2MedImage para la referencia visual de C2. La generación ocurre localmente y se activa solo ante una derivación a imágenes.
 
 ### 9. Evaluación final de test
 
@@ -358,6 +371,23 @@ Otras métricas: accuracy de urgencia 57,58%, accuracy de conclusividad 90,91%, 
 
 Estos números provienen de datos sintéticos educativos y no representan desempeño clínico real. La sensibilidad mínima de 80% fue una restricción de optimización sobre train; en test se obtuvo 83,33%.
 
+## Resultados descriptivos sobre los 110 casos
+
+Además de la evaluación final retenida sobre test, se ejecutó el evaluador sobre los 110 casos como análisis descriptivo del comportamiento global:
+
+| Split | Casos | Match GT principal | Sensibilidad | Especificidad |
+|---|---:|---:|---:|---:|
+| Test retenido | 33 | 51,52% | 83,33% | 55,56% |
+| Todos los casos | 110 | 40,91% | 85,9% | 62,5% |
+
+Matriz de confusión sobre todos los casos:
+
+| TP | FP | FN | TN |
+|---:|---:|---:|---:|
+| 67 | 12 | 11 | 20 |
+
+La sensibilidad y la especificidad sobre los 110 casos se mantienen en un rango cercano a las observadas en test, lo que sugiere que el split retenido es razonablemente representativo para la tarea de derivación a imágenes. El match de GT global es menor (40,91% frente a 51,52%), por lo que no debe afirmarse que todas las métricas sean idénticas. Además, el análisis de 110 casos incluye los 77 casos usados para optimización: es descriptivo y no reemplaza la evaluación final independiente de test.
+
 ## Limitaciones y trabajo futuro
 
 - Los 110 casos son sintéticos y no fueron validados prospectivamente ni como cohorte externa.
@@ -365,7 +395,7 @@ Estos números provienen de datos sintéticos educativos y no representan desemp
 - El tamaño de la base, el solapamiento entre entidades y las reglas manuales limitan el match. Mejorarlo requiere una cohorte mayor, balanceada, revisada por especialistas y un modelo supervisado con calibración y validación externa.
 - Optuna selecciona pesos y umbrales; no entrena un modelo clínico capaz de aprender representaciones nuevas.
 - C2 es una **guía visual prospectiva**. No analiza imágenes reales, no detecta objetos, no segmenta lesiones y no produce ROI clínicamente validadas.
-- Stable Diffusion es generalista. Su PNG es educativo, no pertenece al paciente y no debe interpretarse como evidencia.
+- La versión vigente de la interfaz utiliza Prompt2MedImage para generar la referencia visual; la imagen resultante es educativa, no pertenece al paciente y no debe interpretarse como evidencia.
 - No se utilizó 3D MedDiffusion en la aplicación local porque requiere aproximadamente 40 GB de VRAM.
 - Como mejora futura se necesitan estudios DICOM/NIfTI anonimizados, anotaciones de especialistas y un detector o segmentador evaluado con métricas por lesión/píxel.
 - Para producción se requieren validación clínica, control de acceso, cifrado, auditoría, monitoreo de drift, versionado de modelos y contingencia.
